@@ -60,10 +60,13 @@ def get_day(day) -> DayStats:
     starts, ends = [], []
 
     for boot, end, reason, active, idle in store.sessions_for_day(date_str):
+        now_sec = (datetime.now().hour * 3600 + datetime.now().minute * 60
+                   + datetime.now().second)
         stats.sessions.append(SessionRow(
             date=date_str, start_sec=_to_seconds(boot),
-            end_sec=_to_seconds(end) if end else 0,
-            active_sec=active, idle_sec=idle, reason=reason))
+            end_sec=_to_seconds(end) if end else now_sec,
+            active_sec=active, idle_sec=idle,
+            reason=reason if end else "RUNNING"))
         open_total += _duration(boot, end)
         starts.append(_to_seconds(boot))
         if end:

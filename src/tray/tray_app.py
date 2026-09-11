@@ -2,6 +2,7 @@
 
 import subprocess
 import sys
+import threading
 from pathlib import Path
 
 import pystray
@@ -56,5 +57,20 @@ class TrayApp:
         self.icon.stop()
 
     def run(self) -> None:
+        threading.Thread(target=self._live_title, daemon=True).start()
         self.icon.run()
         self.tracker.stop()
+
+    def _live_title(self) -> None:
+        """Keep the tray tooltip fresh with today's active time."""
+        while self.icon.visible or True:
+            try:
+                active, _ = self.tracker.today_totals()
+                self.icon.title = (f"Digital Wellbeing - "
+                                   f"{fmt_hm(active)} active today")
+            except Exception:
+                pass
+            if not self.icon.RUNNING:
+                break
+            import time
+            time.sleep(30)

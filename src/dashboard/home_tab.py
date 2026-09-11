@@ -171,6 +171,7 @@ class HomeTab(tk.Frame):
         self.summary.config(text=f"{summary_line(stats)}   •   "
                                  f"{self._first_last(stats)}")
         self.chart.set_data(stats.hourly_active, stats.hourly_idle)
+        # week view is date-independent
 
     # ------------------------------------------------------------ helpers --
     @staticmethod

@@ -9,6 +9,7 @@ from src.dashboard import data_source
 from src.dashboard.apps_tab import AppsTab
 from src.dashboard.home_tab import HomeTab
 from src.dashboard.sessions_tab import SessionsTab
+from src.dashboard.week_tab import WeekTab
 from src.utils.time_format import fmt_hm
 
 BG = "#0f1420"
@@ -93,12 +94,16 @@ class DigitalWellbeingApp(ctk.CTk):
         home = self.tabs.add("Home")
         apps = self.tabs.add("Apps")
         sessions = self.tabs.add("Sessions")
+        week = self.tabs.add("Week")
         self.home_tab = HomeTab(home)
         self.apps_tab = AppsTab(apps)
         self.sessions_tab = SessionsTab(sessions)
+        self.week_tab = WeekTab(week)
         self.home_tab.pack(fill="both", expand=True)
         self.apps_tab.pack(fill="both", expand=True)
         self.sessions_tab.pack(fill="both", expand=True)
+        self.week_tab.pack(fill="both", expand=True)
+        self._auto_refresh()
 
     # ----------------------------------------------------------- actions ---
     def _shift_date(self, days: int) -> None:
@@ -125,3 +130,21 @@ class DigitalWellbeingApp(ctk.CTk):
         self.home_tab.render(stats)
         self.apps_tab.render(stats)
         self.sessions_tab.render(stats)
+        self.week_tab.render(data_source.last_n_days(7))
+
+    def _auto_refresh(self) -> None:
+        """Re-render every 30s so a running tracker updates the view live."""
+        try:
+            if self.view_date == self.today:
+                self._refresh_data_only()
+            self.after(30000, self._auto_refresh)
+        except Exception:
+            self.after(30000, self._auto_refresh)
+
+    def _refresh_data_only(self) -> None:
+        stats = data_source.get_day(self.today)
+        self.today_chip.config(text=f"{fmt_hm(stats.active_sec)} active")
+        self.home_tab.render(stats)
+        self.apps_tab.render(stats)
+        self.sessions_tab.render(stats)
+        self.week_tab.render(data_source.last_n_days(7))
