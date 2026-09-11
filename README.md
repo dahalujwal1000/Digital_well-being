@@ -38,7 +38,20 @@ The real tracker will implement the same functions backed by SQLite
 (`sessions`, `app_usage`, `events` tables) — no UI changes needed.
 
 ## Roadmap
-1. ✅ Dashboard UI (mock data)
-2. ⬜ Win32 tracker (`GetForegroundWindow`, `GetLastInputInfo`, power events)
-3. ⬜ SQLite storage (WAL, commit every 15s, crash recovery)
-4. ⬜ System tray + autostart
+1. ✅ Dashboard UI
+2. ✅ Win32 tracker (`GetForegroundWindow`, `GetLastInputInfo`, power events)
+3. ✅ SQLite storage (WAL, flush every 15s, crash recovery)
+4. ✅ System tray + autostart
+5. ⬜ Hardening: multi-day views, per-website tracking, polish
+
+## Run the tracker (background, system tray)
+
+```powershell
+python run_tracker.py              # tray + tracking (normal use)
+python run_tracker.py --no-tray    # headless
+python run_tracker.py --duration N # test run for N seconds
+```
+
+Tray menu: Open Dashboard · Today's active time · Start with Windows · Exit.
+
+Data lives in `%APPDATA%\DigitalWellbeing\wellbeing.db` (SQLite, WAL).

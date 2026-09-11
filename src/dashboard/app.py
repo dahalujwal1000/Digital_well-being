@@ -5,7 +5,7 @@ from datetime import date, timedelta
 
 import customtkinter as ctk
 
-from src.dashboard import mock_data
+from src.dashboard import data_source
 from src.dashboard.apps_tab import AppsTab
 from src.dashboard.home_tab import HomeTab
 from src.dashboard.sessions_tab import SessionsTab
@@ -118,7 +118,7 @@ class DigitalWellbeingApp(ctk.CTk):
         future = d > self.today
         self.btn_next.config(state="disabled" if future else "normal")
 
-        stats = mock_data.get_day(d)
+        stats = data_source.get_day(d)
         self.today_chip.config(
             text=f"{fmt_hm(stats.active_sec)} active"
             if d == self.today else "")
