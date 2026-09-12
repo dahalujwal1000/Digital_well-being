@@ -7,6 +7,7 @@ venv/
 # Build / IDE
 dist/
 build/
+*.spec
 *.egg-info/
 .vscode/
 .idea/

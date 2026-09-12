@@ -62,3 +62,32 @@ python run_tracker.py --duration N # test run for N seconds
 Tray menu: Open Dashboard · Today's active time · Start with Windows · Exit.
 
 Data lives in `%APPDATA%\DigitalWellbeing\wellbeing.db` (SQLite, WAL).
+
+## Install as a Windows app (.exe)
+
+Build standalone executables (Windows only):
+
+```powershell
+.\build_exe.bat
+```
+
+This uses PyInstaller and produces:
+
+- `dist\DigitalWellbeingTracker.exe` — background tracker + system tray icon
+- `dist\DigitalWellbeingDashboard.exe` — the dashboard window
+
+**Install on this PC:** copy the two `.exe` files anywhere you like (e.g.
+`C:\Program Files\DigitalWellbeing\` or keep them in `dist\`), run
+`DigitalWellbeingTracker.exe`, and use the tray menu → **Start with Windows**
+to autostart on login. Data/log paths are `%APPDATA%\DigitalWellbeing\`, so
+the exes can live anywhere.
+
+**Install on other devices:** copy both `.exe` files (they are fully
+self-contained — Python and the dependencies are bundled), run the tracker,
+optionally enable **Start with Windows** in the tray menu. Windows-only;
+Windows Defender may scan onefile exes on first launch (add an exclusion if
+it complains).
+
+> Tip: sign the exes or use an installer (Inno Setup / NSIS) if distributing
+> beyond your own machines.
+
