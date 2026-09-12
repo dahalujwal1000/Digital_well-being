@@ -1,9 +1,0 @@
-v1.1.2: F5 + Facebook-style pull-to-refresh (wheel overscroll)
-
-- F5 anywhere refreshes the full dashboard
-- Wheel-up overscroll at the top of any tab emulates pull-to-refresh:
-  1st tick shows "Pull again to refresh", 2nd tick within 0.7s shows a
-  "Refreshing…" pill and re-renders, then "Updated ✓" (2s cooldown)
-- Fixed a latent bug: both scrollable tabs registered bind_all("<MouseWheel>")
-  without add="+", so the second registration (Sessions) silently replaced
-  the first (Apps) and Apps-tab wheel scrolling never worked
