@@ -42,7 +42,14 @@ The real tracker will implement the same functions backed by SQLite
 2. ✅ Win32 tracker (`GetForegroundWindow`, `GetLastInputInfo`, power events)
 3. ✅ SQLite storage (WAL, flush every 15s, crash recovery)
 4. ✅ System tray + autostart
-5. ⬜ Hardening: multi-day views, per-website tracking, polish
+5. ✅ Multi-day views, per-website tracking
+6. ✅ Hardening pass (v1.1):
+   - thread-safe tracker (tick vs. flush on different threads now locked)
+   - idempotent `stop()` (no double session close on shutdown + exit)
+   - rotating file logging -> `%APPDATA%\DigitalWellbeing\logs\wellbeing.log`
+   - SQLite auto-reconnect on locked/closed connections
+   - midnight-clamped session timelines, empty-state UI, wheel-scroll fix
+   - unit tests: `python -m unittest discover -s tests`
 
 ## Run the tracker (background, system tray)
 

@@ -42,14 +42,6 @@ def _to_seconds(iso: str) -> int:
     return dt.hour * 3600 + dt.minute * 60 + dt.second
 
 
-def _duration(start: str, end: str | None) -> int:
-    """Session open seconds, crossing midnight handled by full timedelta."""
-    fmt = "%Y-%m-%d %H:%M:%S"
-    s = datetime.strptime(start, fmt)
-    e = datetime.strptime(end, fmt) if end else datetime.now()
-    return max(0, int((e - s).total_seconds()))
-
-
 def get_day(day) -> DayStats:
     store = _get_store()
     if store is None:
@@ -59,19 +51,25 @@ def get_day(day) -> DayStats:
     stats = DayStats(day=day)
     open_total = 0
     starts, ends = [], []
+    now = datetime.now()
+    now_sec = now.hour * 3600 + now.minute * 60 + now.second
 
     for boot, end, reason, active, idle in store.sessions_for_day(date_str):
-        now_sec = (datetime.now().hour * 3600 + datetime.now().minute * 60
-                   + datetime.now().second)
+        start_s = _to_seconds(boot)
+        end_s = _to_seconds(end) if end else now_sec
+        # sessions are stored under their boot date, so a session opened at
+        # 23:50 shows fully on that day. Clamp to the viewed day's clock so
+        # the timeline stays inside 00:00-24:00.
+        start_c, end_c = max(0, start_s), min(24 * 3600, end_s)
         stats.sessions.append(SessionRow(
-            date=date_str, start_sec=_to_seconds(boot),
-            end_sec=_to_seconds(end) if end else now_sec,
+            date=date_str, start_sec=start_c,
+            end_sec=max(start_c, end_c),
             active_sec=active, idle_sec=idle,
             reason=reason if end else "RUNNING"))
-        open_total += _duration(boot, end)
-        starts.append(_to_seconds(boot))
+        open_total += max(0, end_c - start_c)
+        starts.append(start_c)
         if end:
-            ends.append(_to_seconds(end))
+            ends.append(end_c)
         stats.active_sec += active
 
     # open >= active+idle; idle derives from open - active (DayStats property)
@@ -93,9 +91,7 @@ def get_day(day) -> DayStats:
 
     if starts:
         stats.first_used_sec = min(starts)
-        stats.last_used_sec = (max(ends) if ends
-                               else (datetime.now().hour * 3600
-                                     + datetime.now().minute * 60))
+        stats.last_used_sec = max(ends) if ends else now_sec
     return stats
 
 

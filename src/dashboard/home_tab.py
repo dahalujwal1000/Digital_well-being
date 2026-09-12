@@ -51,6 +51,11 @@ class HomeTab(tk.Frame):
                                 font=("Segoe UI", 10), anchor="w")
         self.summary.pack(fill="x", padx=28, pady=(4, 10))
 
+        # --- empty state ---------------------------------------------------
+        self.empty = tk.Label(
+            self, text="", bg="#141a28", fg="#8b93a7",
+            font=("Segoe UI", 11), anchor="center", pady=14)
+
         # --- hourly chart -------------------------------------------------
         chart_card = tk.Frame(self, bg=CARD)
         chart_card.pack(fill="both", expand=True, padx=24, pady=(0, 18))
@@ -142,6 +147,15 @@ class HomeTab(tk.Frame):
 
     # ------------------------------------------------------------ render ---
     def render(self, stats: DayStats) -> None:
+        if stats.open_sec == 0 and stats.active_sec == 0:
+            self.empty.config(
+                text="No data for this day yet.\n"
+                     "Is the tracker running?  (python run_tracker.py)")
+            self.empty.pack(fill="both", expand=True, padx=24, pady=(0, 18))
+            self.ring.set_data(0, "0m", "no data")
+            return
+        self.empty.pack_forget()
+
         frac = stats.active_sec / stats.open_sec if stats.open_sec else 0
         # ring sub-text ties the % to the "Laptop open" card
         self.ring.set_data(frac, fmt_hm(stats.active_sec),

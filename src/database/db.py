@@ -11,8 +11,12 @@ import threading
 from datetime import datetime
 from pathlib import Path
 
+from src.utils.log import get_logger
+
 APP_DIR = Path.home() / "AppData" / "Roaming" / "DigitalWellbeing"
 DB_PATH = APP_DIR / "wellbeing.db"
+
+log = get_logger("db")
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS sessions (
@@ -66,30 +70,63 @@ CREATE INDEX IF NOT EXISTS idx_web_date ON web_usage(date);
 
 
 class Store:
-    def __init__(self, path: Path = DB_PATH):
-        self.path = path
-        path.parent.mkdir(parents=True, exist_ok=True)
-        self._lock = threading.Lock()
-        self._con = sqlite3.connect(str(path), check_same_thread=False)
+    def _connect(self) -> None:
+        self._con = sqlite3.connect(str(self.path), check_same_thread=False)
         self._con.execute("PRAGMA journal_mode=WAL")
         self._con.execute("PRAGMA synchronous=NORMAL")
         self._con.executescript(SCHEMA)
         self._con.commit()
 
+    def __init__(self, path: Path = DB_PATH):
+        self.path = path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        self._lock = threading.Lock()
+        self._connect()
+
+    # ------------------------------------------------------- resilience --
+    # A locked/disk-busy DB or a closed connection must not kill the tracker:
+    # reopen once and retry. The thread lock serializes access, so the retry
+    # is safe from any caller thread.
+    def _reconnect(self) -> None:
+        try:
+            self._con.close()
+        except Exception:
+            pass
+        self._connect()
+        log.info("SQLite reconnected")
+
     def _exec(self, sql: str, params=()) -> None:
         with self._lock:
-            self._con.execute(sql, params)
-            self._con.commit()
+            try:
+                self._con.execute(sql, params)
+                self._con.commit()
+            except (sqlite3.OperationalError, sqlite3.ProgrammingError) as exc:
+                log.warning("SQLite write error (%s) - reconnecting", exc)
+                self._reconnect()
+                self._con.execute(sql, params)
+                self._con.commit()
 
     def _query(self, sql: str, params=()) -> list:
         with self._lock:
-            cur = self._con.execute(sql, params)
-            return cur.fetchall()
+            try:
+                cur = self._con.execute(sql, params)
+                return cur.fetchall()
+            except (sqlite3.OperationalError,
+                    sqlite3.ProgrammingError) as exc:
+                log.warning("SQLite read error (%s) - reconnecting", exc)
+                self._reconnect()
+                cur = self._con.execute(sql, params)
+                return cur.fetchall()
 
     def close(self) -> None:
         with self._lock:
-            self._con.commit()
-            self._con.close()
+            try:
+                self._con.commit()
+                self._con.close()
+            except sqlite3.ProgrammingError:
+                pass          # already closed (e.g. after reconnect test)
+            except sqlite3.Error:
+                log.exception("error while closing SQLite connection")
 
     def log_event(self, etype: str, ts: datetime | None = None) -> None:
         self._exec("INSERT INTO events(timestamp, type) VALUES(?, ?)",

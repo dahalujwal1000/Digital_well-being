@@ -7,6 +7,7 @@
   crash-recovered on next boot.
 """
 
+import logging
 import threading
 import time
 from datetime import datetime
@@ -16,11 +17,14 @@ from src.core.win32_hooks import get_foreground, get_idle_seconds
 from src.core.website_rules import is_browser, parse_site
 from src.database.db import Store
 from src.utils.app_info import friendly_name
+from src.utils.log import get_logger
 
 TICK_SEC = 5
 FLUSH_SEC = 15
 IDLE_TIMEOUT_SEC = 60
 MAX_DT_SEC = 30  # cap for clock hiccups / resumed sleep
+
+log = get_logger("tracker")
 
 
 class Tracker:
@@ -31,7 +35,11 @@ class Tracker:
         self._stop = threading.Event()
         self._thread = None
 
-        # pending deltas, flushed periodically
+        # pending deltas, flushed periodically.
+        # GUARD: _tick runs on the tracker thread while _flush() may run on
+        # the Win32 message-pump thread (lock/suspend/endsession) -- every
+        # access to pending state must hold self._lock.
+        self._lock = threading.Lock()
         self._pending_app: dict[tuple, list] = {}   # (date,hour,exe) -> [sec, title]
         self._pending_hourly: dict[tuple, list] = {}  # (date,hour) -> [act, idle]
         self._pending_web: dict[tuple, float] = {}  # (date,hour,site) -> sec
@@ -53,13 +61,29 @@ class Tracker:
         })
 
     # ---------------------------------------------------------- lifecycle --
+    @staticmethod
+    def _safe_run(fn, *args) -> None:
+        """Run a background thread body; log instead of dying silently."""
+        try:
+            fn(*args)
+        except Exception:
+            log.exception("background thread crashed (continuing)")
+
     def start(self) -> None:
-        threading.Thread(target=self._watcher.start, daemon=True).start()
-        threading.Thread(target=self._watcher.pump, daemon=True).start()
+        # tracking still works if the event watcher fails; we only lose
+        # lock/sleep/shutdown session events (which are logged).
+        threading.Thread(target=self._safe_run, args=(self._watcher.start,),
+                         daemon=True).start()
+        threading.Thread(target=self._safe_run, args=(self._watcher.pump,),
+                         daemon=True).start()
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
 
     def stop(self, reason: str = "SHUTDOWN") -> None:
+        # idempotent: endsession + tray Exit can both call stop() -- only the
+        # first call closes the session (otherwise end_time is overwritten).
+        if self._stop.is_set():
+            return
         self._stop.set()
         self._watcher.stop()
         if self._thread:
@@ -69,6 +93,8 @@ class Tracker:
         self.store.close_session(self.session_id, now, reason)
         self.store.log_event(reason)
         self.store.close()
+        log.info("tracker stopped (%s), session %s closed", reason,
+                 self.session_id)
 
     def _run(self) -> None:
         last = time.time()
@@ -92,79 +118,117 @@ class Tracker:
         idle = get_idle_seconds() >= self.idle_timeout
         fg = None if idle else get_foreground()
 
-        if fg is not None:
-            _, exe, title = fg
-            key = (date_str, hour, exe)
-            entry = self._pending_app.get(key)
-            if entry is None:
-                self._pending_app[key] = entry = [0.0, title]
-            entry[0] += dt
-            entry[1] = title
-            if is_browser(exe):
-                site = parse_site(title)
-                self._pending_web[(date_str, hour, site)] = (
-                    self._pending_web.get((date_str, hour, site), 0.0) + dt)
-            pend = self._pending_hourly.setdefault((date_str, hour), [0.0, 0.0])
-            pend[0] += dt
-            self._pending_active += dt
-        else:
-            pend = self._pending_hourly.setdefault((date_str, hour), [0.0, 0.0])
-            pend[1] += dt
-            self._pending_idle += dt
+        with self._lock:
+            if fg is not None:
+                _, exe, title = fg
+                key = (date_str, hour, exe)
+                entry = self._pending_app.get(key)
+                if entry is None:
+                    self._pending_app[key] = entry = [0.0, title]
+                entry[0] += dt
+                entry[1] = title
+                if is_browser(exe):
+                    site = parse_site(title)
+                    self._pending_web[(date_str, hour, site)] = (
+                        self._pending_web.get((date_str, hour, site), 0.0) + dt)
+                pend = self._pending_hourly.setdefault(
+                    (date_str, hour), [0.0, 0.0])
+                pend[0] += dt
+                self._pending_active += dt
+            else:
+                pend = self._pending_hourly.setdefault(
+                    (date_str, hour), [0.0, 0.0])
+                pend[1] += dt
+                self._pending_idle += dt
 
     # -------------------------------------------------------------- flush --
     def _flush(self) -> None:
-        if not (self._pending_app or self._pending_hourly
-                or self._pending_active or self._pending_idle):
-            return
-        for (date_str, hour, exe), (sec, title) in self._pending_app.items():
-            self.store.add_app_time(date_str, hour, friendly_name(exe),
-                                    exe, title, int(sec))
-        for (date_str, hour), (act, idle) in self._pending_hourly.items():
-            self.store.add_hourly(date_str, hour, int(act), int(idle))
-        for (date_str, hour, site), sec in self._pending_web.items():
-            self.store.add_web_time(date_str, hour, site, int(sec))
-        if self._pending_active or self._pending_idle:
-            self.store.update_session_time(
-                self.session_id, int(self._pending_active),
-                int(self._pending_idle))
-        self._pending_app.clear()
-        self._pending_hourly.clear()
-        self._pending_web.clear()
-        self._pending_active = self._pending_idle = 0.0
+        # snapshot-and-clear under the lock, then write to SQLite outside it
+        # (the pump thread may call this concurrently with the tracker loop).
+        with self._lock:
+            if not (self._pending_app or self._pending_hourly
+                    or self._pending_active or self._pending_idle):
+                return
+            app, hourly, web = (self._pending_app, self._pending_hourly,
+                                self._pending_web)
+            active, idle = self._pending_active, self._pending_idle
+            self._pending_app = {}
+            self._pending_hourly = {}
+            self._pending_web = {}
+            self._pending_active = self._pending_idle = 0.0
+
+        try:
+            for (date_str, hour, exe), (sec, title) in app.items():
+                self.store.add_app_time(date_str, hour, friendly_name(exe),
+                                        exe, title, int(sec))
+            for (date_str, hour), (act, idle) in hourly.items():
+                self.store.add_hourly(date_str, hour, int(act), int(idle))
+            for (date_str, hour, site), sec in web.items():
+                self.store.add_web_time(date_str, hour, site, int(sec))
+            if active or idle:
+                self.store.update_session_time(
+                    self.session_id, int(active), int(idle))
+        except Exception:
+            # never lose the whole run because one write failed
+            log.exception("flush failed - %d app / %d hourly / %d web rows "
+                          "dropped", len(app), len(hourly), len(web))
 
     # ------------------------------------------------------- event handlers --
+    # These run on the Win32 message-pump thread; a crash here would kill
+    # lock/sleep/shutdown handling, so each handler is fully guarded.
     def _on_lock(self) -> None:
-        self._flush()
-        self.store.log_event("LOCK")
+        try:
+            self._flush()
+            self.store.log_event("LOCK")
+        except Exception:
+            log.exception("LOCK handler failed")
 
     def _on_unlock(self) -> None:
-        self.store.log_event("UNLOCK")
+        try:
+            self.store.log_event("UNLOCK")
+        except Exception:
+            log.exception("UNLOCK handler failed")
 
     def _on_suspend(self) -> None:
-        self._flush()
-        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        self.store.close_session(self.session_id, now, "SLEEP")
-        self.store.log_event("SLEEP")
+        try:
+            self._flush()
+            now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            self.store.close_session(self.session_id, now, "SLEEP")
+            self.store.log_event("SLEEP")
+        except Exception:
+            log.exception("SUSPEND handler failed")
 
     def _on_resume(self) -> None:
-        self.store.log_event("WAKE")
-        now = datetime.now()
-        self.session_id = self.store.open_session(
-            now.strftime("%Y-%m-%d"), now.strftime("%Y-%m-%d %H:%M:%S"))
+        try:
+            self.store.log_event("WAKE")
+            now = datetime.now()
+            self.session_id = self.store.open_session(
+                now.strftime("%Y-%m-%d"), now.strftime("%Y-%m-%d %H:%M:%S"))
+            log.info("resumed - new session %s", self.session_id)
+        except Exception:
+            log.exception("RESUME handler failed")
 
     def _on_endsession(self, reason: str = "SHUTDOWN") -> None:
         # Windows is shutting down / user logging off - save NOW
-        self._flush()
-        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        self.store.close_session(self.session_id, now, reason)
-        self.store.log_event(reason)
+        try:
+            self._flush()
+            now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            self.store.close_session(self.session_id, now, reason)
+            self.store.log_event(reason)
+        except Exception:
+            log.exception("%s handler failed", reason)
 
     # -------------------------------------------------------------- status --
+    def _date_str(self) -> str:
+        """Today's date key (exposed for tests and status display)."""
+        return datetime.now().strftime("%Y-%m-%d")
+
     def today_totals(self) -> tuple[int, int]:
         """(active_sec, idle_sec) including unflushed pending deltas."""
+        with self._lock:
+            pending_active, pending_idle = (self._pending_active,
+                                            self._pending_idle)
         row = self.store.get_session(self.session_id)
         active = row[4] if row else 0
         idle = row[5] if row else 0
-        return (active + int(self._pending_active),
-                idle + int(self._pending_idle))
+        return (active + int(pending_active), idle + int(pending_idle))

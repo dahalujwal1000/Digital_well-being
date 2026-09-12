@@ -1,0 +1,96 @@
+"""Unit tests for Tracker tick/flush logic (Win32 calls are stubbed)."""
+
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+import src.core.tracker as tracker_mod  # noqa: E402
+from src.core.tracker import Tracker  # noqa: E402
+from src.database.db import Store  # noqa: E402
+
+
+class TrackerTests(unittest.TestCase):
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        self.store = Store(Path(self.dir.name) / "test.db")
+        self.tracker = Tracker(store=self.store)
+        # stop the background machinery - we drive _tick manually
+        self.tracker._stop.set()
+
+    def tearDown(self):
+        self.tracker._stop.set()
+        self.store.close()
+        self.dir.cleanup()
+
+    def test_active_tick_accumulates(self):
+        tracker_mod.get_idle_seconds = lambda: 0.0          # active
+        tracker_mod.get_foreground = lambda: (1, "Code.exe", "VS Code")
+        self.tracker._tick(10.0)
+        active, _ = self.tracker.today_totals()
+        self.assertEqual(active, 10)
+
+    def test_idle_tick_accumulates(self):
+        tracker_mod.get_idle_seconds = lambda: 999.0        # > timeout -> idle
+        self.tracker._tick(7.0)
+        _, idle = self.tracker.today_totals()
+        self.assertEqual(idle, 7)
+
+    def test_flush_persists_everything(self):
+        tracker_mod.get_idle_seconds = lambda: 0.0
+        tracker_mod.get_foreground = lambda: (1, "chrome.exe",
+                                              "Cat video - YouTube")
+        self.tracker._tick(12.0)
+        self.tracker._tick(8.0)
+        self.tracker._flush()
+
+        date_str = self.tracker._date_str()
+        apps = dict((r[0], r[2]) for r in self.store.apps_for_day(date_str))
+        self.assertEqual(apps.get("Chrome"), 20)
+        active, idle = self.store.hourly_for_day(date_str)
+        self.assertEqual(sum(active), 20)
+        web = dict(self.store.web_for_day(date_str))
+        self.assertEqual(web.get("YouTube"), 20)
+
+        # flush clears pending state
+        with self.tracker._lock:
+            self.assertEqual(self.tracker._pending_app, {})
+            self.assertEqual(self.tracker._pending_active, 0)
+
+    def test_stop_is_idempotent(self):
+        self.tracker._stop.clear()   # allow one real stop
+        self.tracker._thread = None
+        self.tracker.stop("SHUTDOWN")
+        sid = self.tracker.session_id
+        self.tracker.stop("SHUTDOWN")    # second call: no-op, must not raise
+        self.assertEqual(self.tracker.session_id, sid)
+
+    def test_threaded_ticks_vs_flush(self):
+        """Smoke the lock: many ticks + concurrent flushes must not raise."""
+        import threading
+        tracker_mod.get_idle_seconds = lambda: 0.0
+        tracker_mod.get_foreground = lambda: (1, "Code.exe", "x")
+
+        def hammer():
+            for _ in range(200):
+                self.tracker._tick(0.1)
+
+        def flusher():
+            for _ in range(100):
+                self.tracker._flush()
+
+        t1 = threading.Thread(target=hammer)
+        t2 = threading.Thread(target=flusher)
+        t1.start(); t2.start()
+        t1.join(); t2.join()
+        self.tracker._flush()
+        date_str = self.tracker._date_str()
+        apps = dict((r[0], r[2]) for r in self.store.apps_for_day(date_str))
+        self.assertEqual(apps.get("VS Code"), 20)   # 200 * 0.1
+
+
+if __name__ == "__main__":
+    unittest.main()

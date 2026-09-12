@@ -40,8 +40,14 @@ class AppsTab(tk.Frame):
         self.canvas.bind_all("<MouseWheel>", self._on_wheel)
 
     def _on_wheel(self, event) -> None:
-        if self.canvas.winfo_ismapped():
-            self.canvas.yview_scroll(-1 * int(event.delta / 120), "units")
+        # bind_all fires for every scroll event in the app; scroll only if
+        # the widget under the mouse belongs to THIS tab's canvas.
+        w = getattr(event, "widget", None)
+        while w is not None:
+            if w is self.canvas:
+                self.canvas.yview_scroll(-1 * int(event.delta / 120), "units")
+                return
+            w = getattr(w, "master", None)
 
     def render(self, stats: DayStats) -> None:
         for w in self.inner.winfo_children():

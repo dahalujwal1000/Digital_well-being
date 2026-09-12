@@ -103,6 +103,7 @@ class DigitalWellbeingApp(ctk.CTk):
         self.apps_tab.pack(fill="both", expand=True)
         self.sessions_tab.pack(fill="both", expand=True)
         self.week_tab.pack(fill="both", expand=True)
+        self.bind("<Escape>", lambda e: self.destroy())
         self._auto_refresh()
 
     # ----------------------------------------------------------- actions ---
@@ -147,4 +148,10 @@ class DigitalWellbeingApp(ctk.CTk):
         self.home_tab.render(stats)
         self.apps_tab.render(stats)
         self.sessions_tab.render(stats)
-        self.week_tab.render(data_source.last_n_days(7))
+        # week view is date-independent; refresh it less often (2 min)
+        if not hasattr(self, "_next_week"):
+            self._next_week = 0
+        self._next_week -= 30
+        if self._next_week <= 0:
+            self.week_tab.render(data_source.last_n_days(7))
+            self._next_week = 120

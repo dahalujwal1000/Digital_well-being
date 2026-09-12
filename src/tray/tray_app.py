@@ -10,9 +10,11 @@ from PIL import Image, ImageDraw
 
 from src.core.tracker import Tracker
 from src.utils import autostart
+from src.utils.log import get_logger
 from src.utils.time_format import fmt_hm
 
 _ROOT = Path(__file__).resolve().parents[2]
+log = get_logger("tray")
 
 
 def _icon_image() -> Image.Image:
@@ -25,9 +27,12 @@ def _icon_image() -> Image.Image:
 
 
 def _open_dashboard() -> None:
-    subprocess.Popen(
-        [sys.executable, str(_ROOT / "run_dashboard.py")],
-        cwd=str(_ROOT), creationflags=subprocess.CREATE_NEW_CONSOLE)
+    try:
+        subprocess.Popen(
+            [sys.executable, str(_ROOT / "run_dashboard.py")],
+            cwd=str(_ROOT), creationflags=subprocess.CREATE_NEW_CONSOLE)
+    except Exception:
+        log.exception("failed to launch dashboard")
 
 
 class TrayApp:
@@ -69,7 +74,7 @@ class TrayApp:
                 self.icon.title = (f"Digital Wellbeing - "
                                    f"{fmt_hm(active)} active today")
             except Exception:
-                pass
+                log.exception("failed to update tray title")
             if not self.icon.RUNNING:
                 break
             import time
