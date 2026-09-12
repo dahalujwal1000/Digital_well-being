@@ -10,6 +10,7 @@ from src.dashboard.apps_tab import AppsTab
 from src.dashboard.home_tab import HomeTab
 from src.dashboard.sessions_tab import SessionsTab
 from src.dashboard.week_tab import WeekTab
+from src.dashboard.widgets.pull_refresh import PullRefresher
 from src.utils.time_format import fmt_hm
 
 BG = "#0f1420"
@@ -109,7 +110,24 @@ class DigitalWellbeingApp(ctk.CTk):
         self.sessions_tab.pack(fill="both", expand=True)
         self.week_tab.pack(fill="both", expand=True)
         self.bind("<Escape>", lambda e: self.destroy())
+        self.bind("<F5>", lambda e: self._refresh())
+
+        # pull-to-refresh (wheel-up overscroll at the top, 2 quick ticks)
+        self._tab_order = ["Home", "Apps", "Sessions", "Week"]
+        self.pull = PullRefresher(self, self._visible_tab_host, self._refresh)
+        PullRefresher.install_on(self.home_tab, self.pull)
+        PullRefresher.install_on(self.week_tab, self.pull)
+        self.apps_tab.on_pull_top = self.pull.tick
+        self.sessions_tab.on_pull_top = self.pull.tick
         self._auto_refresh()
+
+    def _visible_tab_host(self):
+        """Widget of the currently visible tab (for the refresh pill)."""
+        try:
+            idx = self._tab_order.index(self.tabs.get())
+            return self.tabs.tabs()[idx]
+        except Exception:
+            return None
 
     # ----------------------------------------------------------- actions ---
     def _shift_date(self, days: int) -> None:

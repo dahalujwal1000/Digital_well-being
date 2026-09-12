@@ -46,7 +46,10 @@ class SessionsTab(tk.Frame):
         self.canvas.pack(side="left", fill="both", expand=True,
                          padx=(24, 0), pady=(0, 16))
         self.scroll.pack(side="right", fill="y", pady=(0, 16), padx=(6, 20))
-        self.canvas.bind_all("<MouseWheel>", self._on_wheel)
+        # wheel scrolling (add="+" so it doesn't clobber other tabs'
+        # bind_all handlers) + pull-to-refresh overscroll hook
+        self.on_pull_top = None   # set by app.py -> PullRefresher.tick
+        self.canvas.bind_all("<MouseWheel>", self._on_wheel, add="+")
 
         # empty-state message for days with no tracking data
         self.empty = tk.Label(
@@ -60,7 +63,13 @@ class SessionsTab(tk.Frame):
         w = getattr(event, "widget", None)
         while w is not None:
             if w is self.canvas:
-                self.canvas.yview_scroll(-1 * int(event.delta / 120), "units")
+                delta = int(event.delta / 120)
+                if delta > 0 and self.canvas.yview()[0] <= 0.001:
+                    # overscroll at the top -> pull-to-refresh tick
+                    if self.on_pull_top:
+                        self.on_pull_top()
+                    return
+                self.canvas.yview_scroll(-1 * delta, "units")
                 return
             w = getattr(w, "master", None)
 
