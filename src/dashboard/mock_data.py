@@ -40,6 +40,7 @@ class DayStats:
     hourly_active: list = field(default_factory=list)   # 24 values, seconds per hour
     hourly_idle: list = field(default_factory=list)
     apps: list = field(default_factory=list)            # list[AppUsage]
+    websites: list = field(default_factory=list)        # list[AppUsage] (site slices)
     sessions: list = field(default_factory=list)        # list[SessionRow]
 
     @property

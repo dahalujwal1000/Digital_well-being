@@ -52,6 +52,16 @@ CREATE TABLE IF NOT EXISTS events (
     type TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_events_ts ON events(timestamp);
+
+CREATE TABLE IF NOT EXISTS web_usage (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    date TEXT NOT NULL,
+    hour INTEGER NOT NULL,
+    site TEXT NOT NULL,
+    active_sec INTEGER NOT NULL DEFAULT 0,
+    UNIQUE(date, hour, site)
+);
+CREATE INDEX IF NOT EXISTS idx_web_date ON web_usage(date);
 """
 
 
@@ -138,6 +148,14 @@ class Store:
             "idle_sec = idle_sec + excluded.idle_sec",
             (date_str, hour, active, idle))
 
+    def add_web_time(self, date_str: str, hour: int, site: str,
+                     seconds: int) -> None:
+        self._exec(
+            "INSERT INTO web_usage(date, hour, site, active_sec) "
+            "VALUES(?,?,?,?) ON CONFLICT(date, hour, site) DO UPDATE SET "
+            "active_sec = active_sec + excluded.active_sec",
+            (date_str, hour, site, seconds))
+
     # ------------------------------------------------------------- queries --
     def sessions_for_day(self, date_str: str):
         return self._query(
@@ -160,6 +178,11 @@ class Store:
             "SELECT app_name, MAX(window_title), SUM(active_sec) "
             "FROM app_usage WHERE date = ? GROUP BY app_name "
             "ORDER BY SUM(active_sec) DESC", (date_str,))
+
+    def web_for_day(self, date_str: str):
+        return self._query(
+            "SELECT site, SUM(active_sec) FROM web_usage WHERE date = ? "
+            "GROUP BY site ORDER BY SUM(active_sec) DESC", (date_str,))
 
     def unlocks_for_day(self, date_str: str) -> int:
         row = self._query(

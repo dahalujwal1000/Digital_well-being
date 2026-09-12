@@ -7,6 +7,7 @@ dashboard needs zero changes. Reuses mock_data's dataclasses + colors.
 from datetime import datetime, timedelta
 
 from src.database.db import Store, DB_PATH
+from src.core.website_rules import site_color
 from src.dashboard.mock_data import (APP_COLORS, AppUsage, DayStats,
                                      SessionRow)
 from src.utils.time_format import fmt_hm
@@ -84,6 +85,11 @@ def get_day(day) -> DayStats:
         color = _color_for(exe, i)
         stats.apps.append(AppUsage(name=app_name, process=exe, color=color,
                                    active_sec=sec))
+
+    for i, (site, sec) in enumerate(store.web_for_day(date_str)):
+        stats.websites.append(AppUsage(name=site, process="web",
+                                       color=site_color(site, i),
+                                       active_sec=sec))
 
     if starts:
         stats.first_used_sec = min(starts)

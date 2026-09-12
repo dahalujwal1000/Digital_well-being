@@ -13,6 +13,7 @@ from datetime import datetime
 
 from src.core.power_events import PowerEventWatcher
 from src.core.win32_hooks import get_foreground, get_idle_seconds
+from src.core.website_rules import is_browser, parse_site
 from src.database.db import Store
 from src.utils.app_info import friendly_name
 
@@ -33,6 +34,7 @@ class Tracker:
         # pending deltas, flushed periodically
         self._pending_app: dict[tuple, list] = {}   # (date,hour,exe) -> [sec, title]
         self._pending_hourly: dict[tuple, list] = {}  # (date,hour) -> [act, idle]
+        self._pending_web: dict[tuple, float] = {}  # (date,hour,site) -> sec
         self._pending_active = 0
         self._pending_idle = 0
 
@@ -98,6 +100,10 @@ class Tracker:
                 self._pending_app[key] = entry = [0.0, title]
             entry[0] += dt
             entry[1] = title
+            if is_browser(exe):
+                site = parse_site(title)
+                self._pending_web[(date_str, hour, site)] = (
+                    self._pending_web.get((date_str, hour, site), 0.0) + dt)
             pend = self._pending_hourly.setdefault((date_str, hour), [0.0, 0.0])
             pend[0] += dt
             self._pending_active += dt
@@ -116,12 +122,15 @@ class Tracker:
                                     exe, title, int(sec))
         for (date_str, hour), (act, idle) in self._pending_hourly.items():
             self.store.add_hourly(date_str, hour, int(act), int(idle))
+        for (date_str, hour, site), sec in self._pending_web.items():
+            self.store.add_web_time(date_str, hour, site, int(sec))
         if self._pending_active or self._pending_idle:
             self.store.update_session_time(
                 self.session_id, int(self._pending_active),
                 int(self._pending_idle))
         self._pending_app.clear()
         self._pending_hourly.clear()
+        self._pending_web.clear()
         self._pending_active = self._pending_idle = 0.0
 
     # ------------------------------------------------------- event handlers --
