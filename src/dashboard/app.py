@@ -110,7 +110,7 @@ class DigitalWellbeingApp(ctk.CTk):
         self.sessions_tab.pack(fill="both", expand=True)
         self.week_tab.pack(fill="both", expand=True)
         self.bind("<Escape>", lambda e: self.destroy())
-        self.bind("<F5>", lambda e: self._refresh())
+        self.bind("<F5>", lambda e: self.pull.refresh_now())
 
         # pull-to-refresh (wheel-up overscroll at the top, 2 quick ticks)
         self._tab_order = ["Home", "Apps", "Sessions", "Week"]
