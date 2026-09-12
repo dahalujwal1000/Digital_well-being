@@ -39,6 +39,12 @@ class AppsTab(tk.Frame):
         # mouse-wheel scrolling
         self.canvas.bind_all("<MouseWheel>", self._on_wheel)
 
+        # empty-state message for days with no tracking data
+        self.empty = tk.Label(
+            self, text="No app data for this day yet.\n"
+                       "Is the tracker running?",
+            bg=BG, fg=SUB, font=("Segoe UI", 11), anchor="center", pady=30)
+
     def _on_wheel(self, event) -> None:
         # bind_all fires for every scroll event in the app; scroll only if
         # the widget under the mouse belongs to THIS tab's canvas.
@@ -52,6 +58,11 @@ class AppsTab(tk.Frame):
     def render(self, stats: DayStats) -> None:
         for w in self.inner.winfo_children():
             w.destroy()
+        if not stats.apps and not stats.websites:
+            self.total_lbl.config(text="")
+            self.empty.pack(in_=self.inner, fill="x", expand=True)
+            return
+        self.empty.pack_forget()
         total = max(1, sum(a.active_sec for a in stats.apps))
         self.total_lbl.config(text=f"Total active {total // 3600}h "
                                    f"{total % 3600 // 60}m")

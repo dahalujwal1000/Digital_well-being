@@ -51,6 +51,11 @@ class DigitalWellbeingApp(ctk.CTk):
                                    text="", font=("Segoe UI", 10))
         self.today_chip.pack(side="left", padx=(12, 0), pady=(4, 0))
 
+        # shows when the dashboard has no DB yet and is serving demo data
+        self.demo_lbl = tk.Label(left, bg=CARD, fg="#ffd54f",
+                                 text="", font=("Segoe UI", 9))
+        self.demo_lbl.pack(side="left", padx=(10, 0), pady=(4, 0))
+
         right = tk.Frame(header, bg=CARD)
         right.pack(side="right", padx=20, pady=10)
 
@@ -128,6 +133,9 @@ class DigitalWellbeingApp(ctk.CTk):
         self.today_chip.config(
             text=f"{fmt_hm(stats.active_sec)} active"
             if d == self.today else "")
+        self.demo_lbl.config(
+            text="DEMO DATA - start the tracker for real stats"
+            if data_source.mode() == "mock" else "")
         self.home_tab.render(stats)
         self.apps_tab.render(stats)
         self.sessions_tab.render(stats)

@@ -1,0 +1,9 @@
+v1.1.1 polish: empty states on all tabs, tighter X/Twitter rule, demo-data banner
+
+- Apps and Sessions tabs now show "No data for this day yet" instead of blank
+- Home header shows "DEMO DATA" badge when the SQLite DB doesn't exist yet,
+  so first-run mock data can't be mistaken for real stats
+- X (Twitter) rule tightened: word-bounded twitter/x.com plus exact
+  "- X" / "/ X" title forms; Dropbox/Xbox/Max/iPhone X no longer misclassify
+- Removed dead amazon.in rule (shadowed by earlier amazon. rule)
+- Added 5 regression tests for site classification (17 total, all passing)

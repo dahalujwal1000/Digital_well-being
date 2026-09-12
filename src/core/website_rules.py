@@ -31,7 +31,9 @@ _RULES = [
     (r"github", "GitHub"),
     (r"stack overflow|stackoverflow", "Stack Overflow"),
     (r"reddit", "Reddit"),
-    (r"\bx\b.*twitter|twitter|\bX - ", "X (Twitter)"),
+    # word-bounded: "dropbox.com" must NOT match x.com, "Xbox" must NOT
+    # match a bare X; x.com titles look like "Home / X" or "Posts - X"
+    (r"\btwitter\b|\bx\.com\b|/\sX$|\s-\sX$|^\s*X\s*$", "X (Twitter)"),
     (r"linkedin", "LinkedIn"),
     (r"instagram", "Instagram"),
     (r"facebook", "Facebook"),
@@ -43,7 +45,6 @@ _RULES = [
     (r"hotstar|jiocinema", "Streaming (IN)"),
     (r"amazon\.", "Amazon"),
     (r"flipkart", "Flipkart"),
-    (r"amazon\.in|amazon shopping", "Amazon"),
     (r"wikipedia", "Wikipedia"),
     (r"notion\.so|notion - ", "Notion"),
     (r"figma", "Figma"),

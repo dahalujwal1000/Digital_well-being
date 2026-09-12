@@ -34,6 +34,18 @@ class WebsiteRulesTests(unittest.TestCase):
     def test_case_insensitive(self):
         self.assertEqual(parse_site("GITHUB.COM"), "GitHub")
 
+    def test_x_twitter(self):
+        self.assertEqual(parse_site("Home / X"), "X (Twitter)")
+        self.assertEqual(parse_site("Posts - X"), "X (Twitter)")
+        self.assertEqual(parse_site("x.com - Google Chrome"), "X (Twitter)")
+
+    def test_x_false_positives(self):
+        # regression: these must NOT be classified as X (Twitter)
+        self.assertEqual(parse_site("Dropbox - Files"), OTHER_WEB)
+        self.assertEqual(parse_site("Xbox Support"), OTHER_WEB)
+        self.assertEqual(parse_site("Max - Movies"), OTHER_WEB)
+        self.assertEqual(parse_site("iPhone X - Apple"), OTHER_WEB)
+
 
 if __name__ == "__main__":
     unittest.main()

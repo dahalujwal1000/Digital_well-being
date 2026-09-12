@@ -11,6 +11,14 @@ from src.dashboard import mock_data
 
 log = logging.getLogger("wellbeing.data_source")
 
+_mode = "mock"   # "real" when the last get_day/last_n_days came from SQLite
+_mock_warned = False
+
+
+def mode() -> str:
+    """'real' if the last data fetch hit SQLite, 'mock' for demo data."""
+    return _mode
+
 
 def _real():
     try:
@@ -23,24 +31,33 @@ def _real():
 
 
 def get_day(day):
+    global _mode
     p = _real()
     if p:
         try:
-            return p.get_day(day)
+            stats = p.get_day(day)
+            _mode = "real"
+            return stats
         except Exception:
             log.exception("provider.get_day(%s) failed - using mock", day)
-    else:
-        log.info("no SQLite DB - serving mock data for %s", day)
+    elif not _mock_warned:
+        log.info("no SQLite DB - serving demo data until the tracker runs")
+        _mock_warned = True
+    _mode = "mock"
     return mock_data.get_day(day)
 
 
 def last_n_days(n):
+    global _mode
     p = _real()
     if p:
         try:
-            return p.last_n_days(n)
+            days = p.last_n_days(n)
+            _mode = "real"
+            return days
         except Exception:
             log.exception("provider.last_n_days(%d) failed - using mock", n)
+    _mode = "mock"
     return mock_data.last_n_days(n)
 
 

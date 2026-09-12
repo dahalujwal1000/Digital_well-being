@@ -48,6 +48,12 @@ class SessionsTab(tk.Frame):
         self.scroll.pack(side="right", fill="y", pady=(0, 16), padx=(6, 20))
         self.canvas.bind_all("<MouseWheel>", self._on_wheel)
 
+        # empty-state message for days with no tracking data
+        self.empty = tk.Label(
+            self, text="No sessions for this day yet.\n"
+                       "Is the tracker running?",
+            bg=BG, fg=SUB, font=("Segoe UI", 11), anchor="center", pady=30)
+
     def _on_wheel(self, event) -> None:
         # bind_all fires for every scroll event in the app; scroll only if
         # the widget under the mouse belongs to THIS tab's canvas.
@@ -61,6 +67,10 @@ class SessionsTab(tk.Frame):
     def render(self, stats: DayStats) -> None:
         for w in self.inner.winfo_children():
             w.destroy()
+        if not stats.sessions:
+            self.empty.pack(in_=self.inner, fill="x", expand=True)
+            return
+        self.empty.pack_forget()
         for s in stats.sessions:
             card = tk.Frame(self.inner, bg=CARD)
             card.pack(fill="x", pady=(0, 10))
