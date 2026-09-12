@@ -57,4 +57,10 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception:
+        # windowed exes have no console -- make sure any fatal error
+        # lands in the log file instead of vanishing
+        log.exception("fatal error - tracker exited")
+        sys.exit(1)

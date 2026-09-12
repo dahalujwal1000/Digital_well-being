@@ -28,9 +28,17 @@ def _icon_image() -> Image.Image:
 
 def _open_dashboard() -> None:
     try:
-        subprocess.Popen(
-            [sys.executable, str(_ROOT / "run_dashboard.py")],
-            cwd=str(_ROOT), creationflags=subprocess.CREATE_NEW_CONSOLE)
+        if getattr(sys, "frozen", False):
+            # frozen exe: launch the dashboard exe that ships next to us
+            exe = Path(sys.executable).parent / "DigitalWellbeingDashboard.exe"
+            if not exe.exists():
+                log.error("dashboard exe not found at %s", exe)
+                return
+            subprocess.Popen([str(exe)])
+        else:
+            subprocess.Popen(
+                [sys.executable, str(_ROOT / "run_dashboard.py")],
+                cwd=str(_ROOT), creationflags=subprocess.CREATE_NEW_CONSOLE)
     except Exception:
         log.exception("failed to launch dashboard")
 
@@ -38,13 +46,15 @@ def _open_dashboard() -> None:
 class TrayApp:
     def __init__(self, tracker: Tracker):
         self.tracker = tracker
+        self._stopped = threading.Event()
         self.icon = pystray.Icon(
             "DigitalWellbeing", _icon_image(), "Digital Wellbeing",
             menu=pystray.Menu(
                 pystray.MenuItem("Open Dashboard",
                                  lambda *_: _open_dashboard(),
                                  default=True),
-                pystray.MenuItem(lambda item: fmt_hm(*tracker.today_totals())
+                pystray.MenuItem(lambda item:
+                                 fmt_hm(tracker.today_totals()[0])
                                  + " active today",
                                  lambda *_: None, enabled=False),
                 pystray.Menu.SEPARATOR,
@@ -59,6 +69,7 @@ class TrayApp:
         autostart.toggle()
 
     def _exit(self, *_):
+        self._stopped.set()
         self.icon.stop()
 
     def run(self) -> None:
@@ -68,14 +79,11 @@ class TrayApp:
 
     def _live_title(self) -> None:
         """Keep the tray tooltip fresh with today's active time."""
-        while self.icon.visible or True:
+        while not self._stopped.is_set():
             try:
                 active, _ = self.tracker.today_totals()
                 self.icon.title = (f"Digital Wellbeing - "
                                    f"{fmt_hm(active)} active today")
             except Exception:
                 log.exception("failed to update tray title")
-            if not self.icon.RUNNING:
-                break
-            import time
-            time.sleep(30)
+            self._stopped.wait(30)

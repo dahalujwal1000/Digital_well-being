@@ -1,0 +1,15 @@
+v1.2.1: fix silent tray crash that killed the tracker exe on launch
+
+- Root cause of "tracker only ever showed VS Code": the tray menu's
+  "X active today" item called fmt_hm(*today_totals()) with 2 args
+  (TypeError) -> pystray crashed while building the menu -> in the
+  --windowed exe the traceback was invisible and the process died
+  silently seconds after launch, orphaning its session
+- Fix: pass only today_totals()[0]; replaced nonexistent icon.RUNNING
+  check in the live-title thread with a proper stop Event
+- run_tracker.py: wrap main() so fatal errors land in the log file
+  (windowed exes have no console to print tracebacks to)
+- _open_dashboard(): frozen exe now launches DigitalWellbeingDashboard.exe
+  sitting next to the tracker exe instead of sys.executable + script
+- Verified: console build reproduces the old crash, fixed build runs
+  tray mode >45s, live test recorded VS Code + Terminal (two apps)
