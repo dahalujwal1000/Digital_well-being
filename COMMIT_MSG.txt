@@ -1,9 +1,0 @@
-v1.2.2: animated refresh indicator
-
-- Pull-to-refresh and F5 now show a pill that slides down from the top
-  of the visible tab: "Pull again to refresh" (first overscroll tick),
-  "Refreshing…" with a spinning arc while data re-loads, "Updated ✓",
-  then it slides back up (step-animated, ~14ms frames)
-- F5 routed through the same animated path (refresh_now)
-- Verified: trace shows pill + spinner + data re-fetch on F5; 17/17
-  tests OK; smoke test OK; dashboard exe rebuilt with the animation
