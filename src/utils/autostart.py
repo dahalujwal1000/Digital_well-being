@@ -15,9 +15,13 @@ def _open() -> winreg.HKEYType:
 
 
 def command() -> str:
+    if getattr(sys, "frozen", False):
+        # frozen single exe: point autostart straight at the binary itself
+        return f'"{sys.executable}"'
+    # dev / not frozen: use pythonw to avoid a console window, then the entry
     pythonw = Path(sys.executable).with_name("pythonw.exe")
     exe = pythonw if pythonw.exists() else Path(sys.executable)
-    entry = Path(__file__).resolve().parents[2] / "run_tracker.py"
+    entry = Path(__file__).resolve().parents[2] / "run_app.py"
     return f'"{exe}" "{entry}"'
 
 

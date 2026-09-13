@@ -17,6 +17,7 @@ class AppRow(tk.Frame):
         frac = max(0.0, min(1.0, frac))
         self.color = color
         self.frac = frac
+        self._hover = False
 
         top = tk.Frame(self, bg=self.BG)
         top.pack(fill="x", padx=14, pady=(10, 2))
@@ -38,6 +39,36 @@ class AppRow(tk.Frame):
         self.bar.pack(fill="x", padx=14, pady=(0, 10))
         self.bar.bind("<Configure>", lambda e: self._draw_bar())
         self.bind("<Configure>", lambda e: self._draw_bar())
+
+        # hover: brighten the whole row (bind on self + every child)
+        widgets = [self] + list(self.winfo_children())
+        for w in widgets:
+            w.bind("<Enter>", self._enter, add="+")
+            w.bind("<Leave>", self._leave, add="+")
+        for lbl in top.winfo_children():
+            lbl.bind("<Enter>", self._enter, add="+")
+            lbl.bind("<Leave>", self._leave, add="+")
+
+    HOVER_BG = "#1a2233"
+    HOVER_FG = "#ffffff"
+
+    def _enter(self, _event=None) -> None:
+        self._hover = True
+        self.config(bg=self.HOVER_BG)
+        for w in self.winfo_children():
+            try:
+                w.config(bg=self.HOVER_BG)
+            except Exception:
+                pass
+
+    def _leave(self, _event=None) -> None:
+        self._hover = False
+        self.config(bg=self.BG)
+        for w in self.winfo_children():
+            try:
+                w.config(bg=self.BG)
+            except Exception:
+                pass
 
     def _draw_bar(self) -> None:
         self.bar.delete("all")

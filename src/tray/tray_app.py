@@ -29,15 +29,12 @@ def _icon_image() -> Image.Image:
 def _open_dashboard() -> None:
     try:
         if getattr(sys, "frozen", False):
-            # frozen exe: launch the dashboard exe that ships next to us
-            exe = Path(sys.executable).parent / "DigitalWellbeingDashboard.exe"
-            if not exe.exists():
-                log.error("dashboard exe not found at %s", exe)
-                return
-            subprocess.Popen([str(exe)])
+            # frozen: relaunch the SAME single exe in dashboard mode
+            subprocess.Popen([sys.executable, "--dashboard"])
         else:
+            # dev: run the unified entry point in dashboard mode
             subprocess.Popen(
-                [sys.executable, str(_ROOT / "run_dashboard.py")],
+                [sys.executable, str(_ROOT / "run_app.py"), "--dashboard"],
                 cwd=str(_ROOT), creationflags=subprocess.CREATE_NEW_CONSOLE)
     except Exception:
         log.exception("failed to launch dashboard")

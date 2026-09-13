@@ -1,5 +1,6 @@
 """Main dashboard window: header (date nav) + tabview (Home/Apps/Sessions)."""
 
+import ctypes
 import tkinter as tk
 from datetime import date, timedelta
 
@@ -20,14 +21,26 @@ SUB = "#8b93a7"
 ACCENT = "#4fc3f7"
 
 
+def _enable_dpi_awareness() -> None:
+    """Per-monitor DPI awareness: crisp text on high-resolution screens."""
+    try:
+        ctypes.windll.shcore.SetProcessDpiAwareness(2)   # per-monitor
+    except Exception:
+        try:
+            ctypes.windll.user32.SetProcessDPIAware()
+        except Exception:
+            pass
+
+
 class DigitalWellbeingApp(ctk.CTk):
     def __init__(self):
+        _enable_dpi_awareness()
         super().__init__()
         ctk.set_appearance_mode("dark")
         ctk.set_default_color_theme("blue")
 
         self.title("Digital Wellbeing")
-        self.geometry("920x640")
+        self.geometry("980x660")
         self.minsize(860, 600)
         self.configure(fg_color=BG)
 
@@ -37,6 +50,19 @@ class DigitalWellbeingApp(ctk.CTk):
         self._build_header()
         self._build_tabs()
         self._refresh()
+        self._center_window()
+
+    def _center_window(self) -> None:
+        """Center the window on the primary monitor."""
+        try:
+            self.update_idletasks()
+            w, h = self.winfo_width(), self.winfo_height()
+            sw, sh = self.winfo_screenwidth(), self.winfo_screenheight()
+            x = (sw - w) // 2
+            y = max(0, (sh - h) // 2 - 24)
+            self.geometry(f"+{x}+{y}")
+        except Exception:
+            pass
 
     # ---------------------------------------------------------------- UI ---
     def _build_header(self) -> None:
@@ -104,13 +130,16 @@ class DigitalWellbeingApp(ctk.CTk):
         self.home_tab = HomeTab(home)
         self.apps_tab = AppsTab(apps)
         self.sessions_tab = SessionsTab(sessions)
-        self.week_tab = WeekTab(week)
+        self.week_tab = WeekTab(week, on_day_click=self._go_to_date)
         self.home_tab.pack(fill="both", expand=True)
         self.apps_tab.pack(fill="both", expand=True)
         self.sessions_tab.pack(fill="both", expand=True)
         self.week_tab.pack(fill="both", expand=True)
         self.bind("<Escape>", lambda e: self.destroy())
         self.bind("<F5>", lambda e: self.pull.refresh_now())
+        self.bind("<Left>", lambda e: self._shift_date(-1))
+        self.bind("<Right>", lambda e: self._shift_date(+1))
+        self.bind("<Home>", lambda e: self._go_today())
 
         # pull-to-refresh (wheel-up overscroll at the top, 2 quick ticks)
         self._tab_order = ["Home", "Apps", "Sessions", "Week"]
@@ -136,6 +165,11 @@ class DigitalWellbeingApp(ctk.CTk):
 
     def _go_today(self) -> None:
         self.view_date = self.today
+        self._refresh()
+
+    def _go_to_date(self, day: date) -> None:
+        """Jump the dashboard to a specific day (used by Week tab clicks)."""
+        self.view_date = day
         self._refresh()
 
     # ------------------------------------------------------------ render ---

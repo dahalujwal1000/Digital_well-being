@@ -1,41 +1,80 @@
-# Digital Wellbeing for Windows (v1)
+# Digital Wellbeing for Windows (v1.2)
 
-A Digital-Wellbeing-style **dashboard** for Windows:
+A Digital-Wellbeing-style **single Windows app**:
 today's **Active screen time**, **Laptop open time**, **Idle time**, **Unlocks**,
-hourly activity chart, top apps, and laptop sessions timeline.
-Restart-proof by design (each boot is its own session, daily totals are sums).
+hourly activity chart, top apps/websites, laptop sessions timeline —
+tracked by a background engine that lives in the **system tray**, viewed in a
+polished dashboard with **animated ring, hover tooltips, click-to-jump week
+chart and pull-to-refresh**. Restart-proof by design.
 
 **v1 scope:** tracking + storage + dashboard UI. NO blocking / task-kill.
 
 ## Stack
-Python 3.11+ · CustomTkinter · SQLite (later) · Win32 API via ctypes (later)
+Python 3.11+ · CustomTkinter · SQLite · Win32 API via ctypes · PyInstaller
 
-## Run the dashboard UI (currently with mock data)
+## Run from source (dev)
 
 ```powershell
 # 1. Install Python 3.11+ (winget install Python.Python.3.12) if needed
 # 2. From this folder:
 pip install -r requirements.txt
-python run_dashboard.py
+python run_app.py                 # tracker + tray (normal use)
+python run_app.py --dashboard     # dashboard window
+python smoke_test.py              # opens the UI, auto-closes
 ```
+
+## The ONE executable
+
+The whole product ships as a single exe:
+
+| Command | What it does |
+|---|---|
+| `DigitalWellbeing.exe` | tracker + system tray (normal use / autostart) |
+| `DigitalWellbeing.exe --dashboard` | open the dashboard window |
+| `DigitalWellbeing.exe --no-tray` | headless tracker (testing) |
+
+Tray menu: Open Dashboard · Today's active time · Start with Windows · Exit.
+
+Data lives in `%APPDATA%\DigitalWellbeing\wellbeing.db` (SQLite, WAL),
+logs in `%APPDATA%\DigitalWellbeing\logs\wellbeing.log`.
 
 ## Structure
 ```
-run_dashboard.py          # open the dashboard
+run_app.py                  # THE entry point (tracker/tray or --dashboard)
 src/
-  dashboard/app.py        # main window + date navigation
-  dashboard/home_tab.py   # ring, stat cards, hourly chart
-  dashboard/apps_tab.py   # top apps list
-  dashboard/sessions_tab.py  # laptop sessions timeline
-  dashboard/mock_data.py  # data provider (swap with SQLite later)
-  dashboard/widgets/      # TimeRing, HourlyBarChart, AppRow
-  utils/time_format.py
+  core/tracker.py           # Win32 tracking engine
+  dashboard/app.py          # main window + date navigation + DPI aware
+  dashboard/home_tab.py     # animated ring, stat cards, hourly chart
+  dashboard/apps_tab.py     # top apps/websites (hover-highlight rows)
+  dashboard/sessions_tab.py # laptop sessions timeline
+  dashboard/week_tab.py     # last 7 days (hover + click bar to open that day)
+  dashboard/widgets/        # TimeRing, HourlyBarChart, AppRow, PullRefresher…
+  database/                 # SQLite provider (WAL, flush, auto-reconnect)
+  tray/tray_app.py          # system tray icon + autostart toggle
+installer.iss               # Inno Setup installer script (free)
 ```
 
-## Data provider contract
-The UI only talks to `mock_data.get_day(date)` / `last_n_days(n)`.
-The real tracker will implement the same functions backed by SQLite
-(`sessions`, `app_usage`, `events` tables) — no UI changes needed.
+## Publish pipeline (free)
+
+1. **Build** the exe (Windows only):
+   ```powershell
+   .\build_exe.bat        # -> dist\DigitalWellbeing\DigitalWellbeing.exe
+   ```
+   Uses `--onedir` (folder output): starts faster and is far less likely to be
+   flagged by antivirus than onefile self-extracting exes.
+2. **Installer** (free): compile `installer.iss` with
+   [Inno Setup](https://jrsoftware.org/isinfo.php) →
+   `Output\DigitalWellbeing-Setup.exe`. Includes Start Menu/desktop shortcuts,
+   an optional "start when I log in" task and a clean uninstaller.
+3. **Avoid the "virus" flag** (free route):
+   - Distribute via GitHub Releases (reputable HTTPS domain).
+   - Submit the built exe to Microsoft as a false-positive/whitelist request:
+     https://www.microsoft.com/en-us/wdsi/filesubmission
+   - Add icon + version metadata to the exe before wide distribution.
+   - Expect SmartScreen "More info → Run anyway" for the first few weeks
+     until reputation builds. Keep the built file hash stable (rebuild rarely).
+   - Free SmartScreen-trusted signing alternative: Azure Trusted Signing
+     (~$10/mo) if you want to skip the reputation wait.
 
 ## Roadmap
 1. ✅ Dashboard UI
@@ -43,51 +82,14 @@ The real tracker will implement the same functions backed by SQLite
 3. ✅ SQLite storage (WAL, flush every 15s, crash recovery)
 4. ✅ System tray + autostart
 5. ✅ Multi-day views, per-website tracking
-6. ✅ Hardening pass (v1.1):
-   - thread-safe tracker (tick vs. flush on different threads now locked)
-   - idempotent `stop()` (no double session close on shutdown + exit)
-   - rotating file logging -> `%APPDATA%\DigitalWellbeing\logs\wellbeing.log`
-   - SQLite auto-reconnect on locked/closed connections
-   - midnight-clamped session timelines, empty-state UI, wheel-scroll fix
-   - unit tests: `python -m unittest discover -s tests`
-
-## Run the tracker (background, system tray)
-
-```powershell
-python run_tracker.py              # tray + tracking (normal use)
-python run_tracker.py --no-tray    # headless
-python run_tracker.py --duration N # test run for N seconds
-```
-
-Tray menu: Open Dashboard · Today's active time · Start with Windows · Exit.
-
-Data lives in `%APPDATA%\DigitalWellbeing\wellbeing.db` (SQLite, WAL).
-
-## Install as a Windows app (.exe)
-
-Build standalone executables (Windows only):
-
-```powershell
-.\build_exe.bat
-```
-
-This uses PyInstaller and produces:
-
-- `dist\DigitalWellbeingTracker.exe` — background tracker + system tray icon
-- `dist\DigitalWellbeingDashboard.exe` — the dashboard window
-
-**Install on this PC:** copy the two `.exe` files anywhere you like (e.g.
-`C:\Program Files\DigitalWellbeing\` or keep them in `dist\`), run
-`DigitalWellbeingTracker.exe`, and use the tray menu → **Start with Windows**
-to autostart on login. Data/log paths are `%APPDATA%\DigitalWellbeing\`, so
-the exes can live anywhere.
-
-**Install on other devices:** copy both `.exe` files (they are fully
-self-contained — Python and the dependencies are bundled), run the tracker,
-optionally enable **Start with Windows** in the tray menu. Windows-only;
-Windows Defender may scan onefile exes on first launch (add an exclusion if
-it complains).
-
-> Tip: sign the exes or use an installer (Inno Setup / NSIS) if distributing
-> beyond your own machines.
+6. ✅ Hardening pass (v1.1)
+7. ✅ Polish pass (v1.2):
+   - animated progress ring (ease-out sweep)
+   - hover tooltips on hourly chart + week chart
+   - click a week bar to open that day
+   - hover highlights on app rows and session cards
+   - per-monitor DPI awareness, centered window
+   - keyboard: ← / → change day, Home = today, F5 refresh, Esc close
+   - single-exe build (onedir) + Inno Setup installer script
+8. Unit tests: `python -m unittest discover -s tests`
 

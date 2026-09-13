@@ -83,6 +83,7 @@ class SessionsTab(tk.Frame):
         for s in stats.sessions:
             card = tk.Frame(self.inner, bg=CARD)
             card.pack(fill="x", pady=(0, 10))
+            _bind_hover(card)
 
             top = tk.Frame(card, bg=CARD)
             top.pack(fill="x", padx=14, pady=(10, 2))
@@ -104,3 +105,28 @@ class SessionsTab(tk.Frame):
             tk.Label(bottom,
                      text=f"Open {fmt_hm(s.end_sec - s.start_sec)}",
                      bg=CARD, fg=SUB, font=("Segoe UI", 10)).pack(side="left")
+
+
+def _bind_hover(card: tk.Frame, normal: str = CARD,
+                hover: str = "#1a2233") -> None:
+    """Brighten a card (and all descendants) while the cursor is over it."""
+
+    def enter(_e=None) -> None:
+        card.config(bg=hover)
+        for w in card.winfo_children():
+            try:
+                w.config(bg=hover)
+            except Exception:
+                pass
+
+    def leave(_e=None) -> None:
+        card.config(bg=normal)
+        for w in card.winfo_children():
+            try:
+                w.config(bg=normal)
+            except Exception:
+                pass
+
+    for w in [card] + card.winfo_children():
+        w.bind("<Enter>", enter, add="+")
+        w.bind("<Leave>", leave, add="+")
