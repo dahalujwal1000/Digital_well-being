@@ -13,6 +13,7 @@ python -m pip install --quiet pyinstaller || goto :err
 
 python -m PyInstaller --noconfirm --clean ^
   --name DigitalWellbeing ^
+  --noconsole ^
   --collect-all customtkinter ^
   --hidden-import win32timezone ^
   run_app.py || goto :err
