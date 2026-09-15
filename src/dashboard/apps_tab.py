@@ -75,14 +75,15 @@ class AppsTab(tk.Frame):
         self.total_lbl.config(text=f"Total active {total // 3600}h "
                                    f"{total % 3600 // 60}m")
 
-        # --- TOP APPS ---
-        tk.Label(self.inner, text="TOP APPS", bg=BG, fg=SUB,
-                 font=("Segoe UI", 9, "bold")).pack(anchor="w", pady=(0, 6))
-        for app in stats.apps:
-            row = AppRow(self.inner, name=app.name, process=app.process,
-                         color=app.color, seconds=app.active_sec,
-                         frac=app.active_sec / total)
-            row.pack(fill="x", pady=(0, 8))
+        if stats.apps:
+            app_total = max(1, sum(a.active_sec for a in stats.apps))
+            tk.Label(self.inner, text="TOP APPS", bg=BG, fg=SUB,
+                     font=("Segoe UI", 9, "bold")).pack(anchor="w", pady=(0, 6))
+            for app in stats.apps:
+                row = AppRow(self.inner, name=app.name, process=app.process,
+                             color=app.color, seconds=app.active_sec,
+                             frac=app.active_sec / app_total)
+                row.pack(fill="x", pady=(0, 8))
 
         # --- TOP WEBSITES (inside browsers) ---
         if stats.websites:

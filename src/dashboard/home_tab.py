@@ -170,10 +170,15 @@ class HomeTab(tk.Frame):
         top = self._top_app(stats)
         if top is not None:
             name, color, sec = top
-            pct = round(100 * sec / max(1, stats.active_sec))
+            # app-tracked time is measured independently from the session
+            # "active" total, so express the share against total app time
+            # (same denominator as the Apps tab) and clamp to 100%.
+            app_total = max(1, sum(a.active_sec for a in stats.apps))
+            frac = min(1.0, sec / app_total)
+            pct = round(100 * frac)
             card.name_lbl.config(text=name)
-            card.time_lbl.config(text=f"{fmt_hm(sec)}  •  {pct}% of active")
-            card._color, card._frac = color, sec / max(1, stats.active_sec)
+            card.time_lbl.config(text=f"{fmt_hm(sec)}  •  {pct}% of app time")
+            card._color, card._frac = color, frac
             card.dot.delete("all")
             card.dot.create_oval(1, 1, 11, 11, fill=color, width=0)
         else:
