@@ -51,6 +51,8 @@ def get_day(day) -> DayStats:
     stats = DayStats(day=day)
     open_total = 0
     starts, ends = [], []
+    ends_all = []          # includes running sessions (end_c = now today)
+    has_running = False
     now = datetime.now()
     now_sec = now.hour * 3600 + now.minute * 60 + now.second
 
@@ -68,8 +70,11 @@ def get_day(day) -> DayStats:
             reason=reason if end else "RUNNING"))
         open_total += max(0, end_c - start_c)
         starts.append(start_c)
+        ends_all.append(end_c)
         if end:
             ends.append(end_c)
+        else:
+            has_running = True
         stats.active_sec += active
 
     # open >= active+idle; idle derives from open - active (DayStats property)
@@ -91,7 +96,12 @@ def get_day(day) -> DayStats:
 
     if starts:
         stats.first_used_sec = min(starts)
-        stats.last_used_sec = max(ends) if ends else now_sec
+        if has_running:
+            # an open session means the laptop is being used right now --
+            # don't show the stale end of the last closed session
+            stats.last_used_sec = max(ends_all)
+        else:
+            stats.last_used_sec = max(ends) if ends else now_sec
     return stats
 
 

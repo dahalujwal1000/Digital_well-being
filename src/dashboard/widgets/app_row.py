@@ -52,23 +52,21 @@ class AppRow(tk.Frame):
     HOVER_BG = "#1a2233"
     HOVER_FG = "#ffffff"
 
+    def _set_bg_recursive(self, widget: tk.Widget, bg: str) -> None:
+        try:
+            widget.config(bg=bg)
+        except Exception:
+            pass
+        for child in widget.winfo_children():
+            self._set_bg_recursive(child, bg)
+
     def _enter(self, _event=None) -> None:
         self._hover = True
-        self.config(bg=self.HOVER_BG)
-        for w in self.winfo_children():
-            try:
-                w.config(bg=self.HOVER_BG)
-            except Exception:
-                pass
+        self._set_bg_recursive(self, self.HOVER_BG)
 
     def _leave(self, _event=None) -> None:
         self._hover = False
-        self.config(bg=self.BG)
-        for w in self.winfo_children():
-            try:
-                w.config(bg=self.BG)
-            except Exception:
-                pass
+        self._set_bg_recursive(self, self.BG)
 
     def _draw_bar(self) -> None:
         self.bar.delete("all")

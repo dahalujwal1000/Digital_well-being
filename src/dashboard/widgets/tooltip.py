@@ -28,14 +28,20 @@ class ToolTip:
     def _show(self) -> None:
         if self._tip:
             return
-        x = self.widget.winfo_rootx() + self.widget.winfo_width() + 6
-        y = self.widget.winfo_rooty() + self.widget.winfo_height() // 2 - 12
-        self._tip = tw = tk.Toplevel(self.widget)
-        tw.wm_overrideredirect(True)
-        tw.wm_geometry(f"+{x}+{y}")
-        tk.Label(tw, text=self.text, bg=self.bg, fg=self.fg,
-                 font=("Segoe UI", 9), justify="left", padx=10, pady=6,
-                 wraplength=220).pack()
+        try:
+            if not self.widget.winfo_exists():
+                return
+            x = self.widget.winfo_rootx() + self.widget.winfo_width() + 6
+            y = self.widget.winfo_rooty() + self.widget.winfo_height() // 2 - 12
+            self._tip = tw = tk.Toplevel(self.widget)
+            tw.wm_overrideredirect(True)
+            tw.wm_attributes("-topmost", True)
+            tw.wm_geometry(f"+{x}+{y}")
+            tk.Label(tw, text=self.text, bg=self.bg, fg=self.fg,
+                     font=("Segoe UI", 9), justify="left", padx=10, pady=6,
+                     wraplength=220).pack()
+        except Exception:
+            self._tip = None
 
     def _hide(self, _event=None) -> None:
         self._cancel()

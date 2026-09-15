@@ -11,6 +11,21 @@ _user32 = ctypes.windll.user32
 _kernel32 = ctypes.windll.kernel32
 _user32.DefWindowProcW.argtypes = [
     wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
+_user32.DefWindowProcW.restype = ctypes.c_longlong
+
+_user32.CreateWindowExW.argtypes = [
+    wintypes.DWORD, wintypes.LPCWSTR, wintypes.LPCWSTR, wintypes.DWORD,
+    ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+    wintypes.HWND, wintypes.HMENU, wintypes.HINSTANCE, wintypes.LPVOID]
+_user32.CreateWindowExW.restype = wintypes.HWND
+
+_user32.PostMessageW.argtypes = [
+    wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
+_user32.PostMessageW.restype = wintypes.BOOL
+
+_user32.GetMessageW.argtypes = [
+    ctypes.POINTER(wintypes.MSG), wintypes.HWND, wintypes.UINT, wintypes.UINT]
+_user32.GetMessageW.restype = wintypes.BOOL
 
 WM_QUERYENDSESSION = 0x0011
 WM_ENDSESSION = 0x0016
@@ -111,9 +126,22 @@ class PowerEventWatcher:
 
         # lock/unlock notifications for this session
         wtsapi32 = ctypes.windll.wtsapi32
+        wtsapi32.WTSRegisterSessionNotification.argtypes = [
+            wintypes.HWND, wintypes.DWORD]
+        wtsapi32.WTSRegisterSessionNotification.restype = wintypes.BOOL
         wtsapi32.WTSRegisterSessionNotification(
             self._hwnd, NOTIFY_FOR_THIS_SESSION)
         self._running = True
+
+    def run(self) -> None:
+        """Create the hidden window AND pump its messages on ONE thread.
+
+        Win32 message queues belong to the thread that created the window:
+        if start() and pump() run on different threads, the pump never sees
+        any messages. Call run() from a single dedicated thread.
+        """
+        self.start()
+        self.pump()
 
     def pump(self) -> None:
         """Blocking message loop; call from a dedicated thread."""

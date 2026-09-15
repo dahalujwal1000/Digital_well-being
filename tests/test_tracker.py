@@ -39,6 +39,16 @@ class TrackerTests(unittest.TestCase):
         _, idle = self.tracker.today_totals()
         self.assertEqual(idle, 7)
 
+    def test_multi_session_today_totals(self):
+        """today_totals must include active time from previous sessions of today."""
+        self.tracker._pending_active = 100
+        self.tracker._flush()
+        now_str = self.tracker._date_str()
+        self.tracker.session_id = self.store.open_session(now_str, f"{now_str} 14:00:00")
+        self.tracker._pending_active = 50
+        active, _ = self.tracker.today_totals()
+        self.assertEqual(active, 150)
+
     def test_flush_persists_everything(self):
         tracker_mod.get_idle_seconds = lambda: 0.0
         tracker_mod.get_foreground = lambda: (1, "chrome.exe",

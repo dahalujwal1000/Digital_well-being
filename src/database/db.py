@@ -8,7 +8,7 @@
 
 import sqlite3
 import threading
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from src.utils.log import get_logger
@@ -141,13 +141,42 @@ class Store:
         return self._query("SELECT last_insert_rowid()")[0][0]
 
     def recover_crashed(self, now_iso: str) -> int:
-        """Close sessions left RUNNING by a crash/previous run. Returns count."""
+        """Close sessions left RUNNING by a crash/previous run. Returns count.
+
+        end_time is clamped to boot_time + tracked seconds (never past the
+        recovery time), so an overnight crash doesn't count the whole
+        offline night as open time."""
         with self._lock:
-            cur = self._con.execute(
-                "UPDATE sessions SET end_time = ?, end_reason = 'CRASH' "
-                "WHERE end_time IS NULL", (now_iso,))
+            rows = self._con.execute(
+                "SELECT id, boot_time, active_sec, idle_sec FROM sessions "
+                "WHERE end_time IS NULL").fetchall()
+            count = 0
+            for sid, boot_iso, active, idle in rows:
+                try:
+                    dt = datetime.strptime(
+                        boot_iso, "%Y-%m-%d %H:%M:%S") + timedelta(
+                            seconds=int(active) + int(idle))
+                    end_iso = dt.strftime("%Y-%m-%d %H:%M:%S")
+                except (ValueError, TypeError, OverflowError):
+                    end_iso = now_iso
+                # never credit time beyond the actual recovery moment
+                if end_iso > now_iso:
+                    end_iso = now_iso
+                self._con.execute(
+                    "UPDATE sessions SET end_time = ?, end_reason = 'CRASH' "
+                    "WHERE id = ?", (end_iso, sid))
+                count += 1
             self._con.commit()
-            return cur.rowcount
+            return count
+
+    def day_totals(self, date_str: str) -> tuple[int, int]:
+        """(SUM(active_sec), SUM(idle_sec)) across ALL sessions of a day.
+
+        A single day can hold several sessions (boot/sleep/wake splits)."""
+        rows = self._query(
+            "SELECT COALESCE(SUM(active_sec), 0), COALESCE(SUM(idle_sec), 0) "
+            "FROM sessions WHERE date = ?", (date_str,))
+        return (rows[0][0], rows[0][1]) if rows else (0, 0)
 
     def close_session(self, sid: int, end_iso: str, reason: str) -> None:
         self._exec(

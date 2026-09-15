@@ -98,6 +98,12 @@ class HourlyBarChart(tk.Canvas):
         return None
 
     def _on_motion(self, event) -> None:
+        if not self._geo:
+            return
+        pad_l, bar_area, bar_w, pad_t, plot_h, h, peak = self._geo
+        if not (pad_t <= event.y <= pad_t + plot_h):
+            self._set_hover(None)
+            return
         hour = self._hour_at(event.x)
         if hour != self._hover:
             self._set_hover(hour)

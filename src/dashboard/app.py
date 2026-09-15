@@ -142,7 +142,6 @@ class DigitalWellbeingApp(ctk.CTk):
         self.bind("<Home>", lambda e: self._go_today())
 
         # pull-to-refresh (wheel-up overscroll at the top, 2 quick ticks)
-        self._tab_order = ["Home", "Apps", "Sessions", "Week"]
         self.pull = PullRefresher(self, self._visible_tab_host, self._refresh)
         PullRefresher.install_on(self.home_tab, self.pull)
         PullRefresher.install_on(self.week_tab, self.pull)
@@ -153,14 +152,18 @@ class DigitalWellbeingApp(ctk.CTk):
     def _visible_tab_host(self):
         """Widget of the currently visible tab (for the refresh pill)."""
         try:
-            idx = self._tab_order.index(self.tabs.get())
-            return self.tabs.tabs()[idx]
+            # CTkTabview.tabs() returns tab NAME strings; .tab(name) returns
+            # the actual frame widget the pill needs to be placed on.
+            return self.tabs.tab(self.tabs.get())
         except Exception:
             return None
 
     # ----------------------------------------------------------- actions ---
     def _shift_date(self, days: int) -> None:
-        self.view_date += timedelta(days=days)
+        target = self.view_date + timedelta(days=days)
+        if target > self.today:
+            target = self.today
+        self.view_date = target
         self._refresh()
 
     def _go_today(self) -> None:
@@ -169,7 +172,7 @@ class DigitalWellbeingApp(ctk.CTk):
 
     def _go_to_date(self, day: date) -> None:
         """Jump the dashboard to a specific day (used by Week tab clicks)."""
-        self.view_date = day
+        self.view_date = min(day, self.today)
         self._refresh()
 
     # ------------------------------------------------------------ render ---
@@ -178,8 +181,8 @@ class DigitalWellbeingApp(ctk.CTk):
         weekday = d.strftime("%A")
         nice = "Today" if d == self.today else d.strftime("%a, %b %d")
         self.date_lbl.config(text=f"{weekday}  •  {nice}")
-        future = d > self.today
-        self.btn_next.config(state="disabled" if future else "normal")
+        at_or_past_today = d >= self.today
+        self.btn_next.config(state="disabled" if at_or_past_today else "normal")
 
         stats = data_source.get_day(d)
         self.today_chip.config(

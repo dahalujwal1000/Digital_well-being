@@ -32,10 +32,11 @@ def _open_dashboard() -> None:
             # frozen: relaunch the SAME single exe in dashboard mode
             subprocess.Popen([sys.executable, "--dashboard"])
         else:
-            # dev: run the unified entry point in dashboard mode
+            # dev: run the unified entry point in dashboard mode (no new
+            # console -- the dashboard is a GUI, a console window just flashes)
             subprocess.Popen(
                 [sys.executable, str(_ROOT / "run_app.py"), "--dashboard"],
-                cwd=str(_ROOT), creationflags=subprocess.CREATE_NEW_CONSOLE)
+                cwd=str(_ROOT))
     except Exception:
         log.exception("failed to launch dashboard")
 

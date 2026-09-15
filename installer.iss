@@ -41,9 +41,14 @@ Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; \
 Name: "{group}\{#MyAppName} (Tracker)"; Filename: "{app}\{#MyAppExeName}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; \
     Parameters: "--dashboard"; Tasks: desktopicon
-; optional login autostart (per-user HKCU Run key, standard & transparent)
-Name: "{userstartup}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; \
-    Tasks: autostart
+; optional login autostart via the HKCU Run key - the SAME mechanism the
+; tray toggle ("Start with Windows") reads/writes, so installer + app can
+; never desync into double autostart entries
+[Registry]
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; \
+    ValueType: string; ValueName: "DigitalWellbeing"; \
+    ValueData: """{app}\{#MyAppExeName}"""; Tasks: autostart; \
+    Flags: uninsdeletevalue
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Parameters: "--dashboard"; \

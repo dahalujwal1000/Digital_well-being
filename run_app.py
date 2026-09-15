@@ -28,8 +28,33 @@ from src.utils.log import get_logger  # noqa: E402
 log = get_logger("main")
 
 
+_MUTEX_HANDLE = None
+
+
+def _acquire_single_instance() -> None:
+    """One tracker per Windows session: a second instance would double-count
+    time and contend on the SQLite file. A named mutex makes the check
+    process-wide; 'Local\\' namespace is per-login-session (per-user data)."""
+    global _MUTEX_HANDLE
+    import ctypes
+    from ctypes import wintypes
+
+    kernel32 = ctypes.windll.kernel32
+    kernel32.CreateMutexW.argtypes = [wintypes.LPVOID, wintypes.BOOL,
+                                      wintypes.LPCWSTR]
+    kernel32.CreateMutexW.restype = wintypes.HANDLE
+    ERROR_ALREADY_EXISTS = 183
+    _MUTEX_HANDLE = kernel32.CreateMutexW(None, False,
+                                          "Local\\DigitalWellbeing_Tracker_Mutex")
+    if kernel32.GetLastError() == ERROR_ALREADY_EXISTS:
+        log.info("another tracker instance is running - exiting")
+        print("Digital Wellbeing tracker is already running (tray icon).")
+        sys.exit(0)
+
+
 def _run_tracker(args: argparse.Namespace) -> None:
     """Start the background tracking engine (optionally with the tray icon)."""
+    _acquire_single_instance()
     from src.core.tracker import Tracker
     from src.tray.tray_app import TrayApp
 

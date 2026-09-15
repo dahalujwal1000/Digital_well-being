@@ -94,6 +94,18 @@ def _make_sessions(day: date, active_sec: int, idle_sec: int) -> list[SessionRow
     return rows
 
 
+def _make_websites(active_sec: int) -> list[AppUsage]:
+    """Mock browser slices so 'Top Websites' shows in demo mode too."""
+    shares = [("github.com", 0.32, "#4fc3f7"),
+              ("youtube.com", 0.26, "#f48fb1"),
+              ("stackoverflow.com", 0.18, "#ffd54f"),
+              ("mail.google.com", 0.14, "#81c784"),
+              ("news.ycombinator.com", 0.10, "#b39ddb")]
+    return [AppUsage(name=site, process="web", color=color,
+                     active_sec=int(active_sec * share))
+            for site, share, color in shares]
+
+
 def get_day(day: date) -> DayStats:
     """Deterministic pseudo-data per date, so switching dates feels real."""
     seed = day.day + day.month
@@ -112,6 +124,7 @@ def get_day(day: date) -> DayStats:
         hourly_active=hourly_active,
         hourly_idle=hourly_idle,
         apps=_make_apps(active),
+        websites=_make_websites(int(active * 0.45)),
         sessions=_make_sessions(day, active, idle),
     )
 

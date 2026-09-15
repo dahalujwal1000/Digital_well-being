@@ -150,7 +150,7 @@ class HomeTab(tk.Frame):
         if stats.open_sec == 0 and stats.active_sec == 0:
             self.empty.config(
                 text="No data for this day yet.\n"
-                     "Is the tracker running?  (python run_tracker.py)")
+                     "Is the tracker running?  (python run_app.py)")
             self.empty.pack(fill="both", expand=True, padx=24, pady=(0, 18))
             self.ring.set_data(0, "0m", "no data")
             return

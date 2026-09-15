@@ -72,9 +72,9 @@ class Tracker:
     def start(self) -> None:
         # tracking still works if the event watcher fails; we only lose
         # lock/sleep/shutdown session events (which are logged).
-        threading.Thread(target=self._safe_run, args=(self._watcher.start,),
-                         daemon=True).start()
-        threading.Thread(target=self._safe_run, args=(self._watcher.pump,),
+        # The window and its message pump MUST share one thread (Win32
+        # message queues are per-thread), so one thread runs _watcher.run().
+        threading.Thread(target=self._safe_run, args=(self._watcher.run,),
                          daemon=True).start()
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
@@ -99,11 +99,30 @@ class Tracker:
     def _run(self) -> None:
         last = time.time()
         last_flush = last
+        session_date = datetime.now().strftime("%Y-%m-%d")
         while not self._stop.is_set():
             time.sleep(TICK_SEC)
             now = time.time()
             dt = min(now - last, MAX_DT_SEC)
             last = now
+            # midnight rollover: pending data is keyed by date, but the open
+            # session keeps its boot date. Without this, time tracked after
+            # 00:00 is credited to yesterday's session and today shows 0.
+            today = datetime.now()
+            today_str = today.strftime("%Y-%m-%d")
+            if today_str != session_date:
+                try:
+                    self._flush()
+                    self.store.close_session(
+                        self.session_id, session_date + " 23:59:59",
+                        "MIDNIGHT")
+                    self.session_id = self.store.open_session(
+                        today_str, today.strftime("%Y-%m-%d 00:00:00"))
+                    session_date = today_str
+                    log.info("midnight rollover - new session %s",
+                             self.session_id)
+                except Exception:
+                    log.exception("midnight rollover failed (continuing)")
             self._tick(dt)
             if now - last_flush >= FLUSH_SEC:
                 last_flush = now
@@ -224,11 +243,15 @@ class Tracker:
         return datetime.now().strftime("%Y-%m-%d")
 
     def today_totals(self) -> tuple[int, int]:
-        """(active_sec, idle_sec) including unflushed pending deltas."""
+        """(active_sec, idle_sec) for today across ALL of today's sessions,
+        plus unflushed pending deltas.
+
+        Sleep/wake splits the day into several sessions; summing only the
+        current session made the tray title drop to 0 after every wake.
+        Pending deltas are keyed by date in _tick, so they always belong
+        to today."""
         with self._lock:
             pending_active, pending_idle = (self._pending_active,
                                             self._pending_idle)
-        row = self.store.get_session(self.session_id)
-        active = row[4] if row else 0
-        idle = row[5] if row else 0
+        active, idle = self.store.day_totals(self._date_str())
         return (active + int(pending_active), idle + int(pending_idle))

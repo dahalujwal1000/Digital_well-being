@@ -120,11 +120,17 @@ class WeekTab(tk.Frame):
     def _day_at(self, x: int) -> int | None:
         if not self._geo:
             return None
-        bar_area, _, _, _, _ = self._geo
+        bar_area, _, _, _ = self._geo
         idx = int(x // bar_area)
         return idx if 0 <= idx < len(self.days) else None
 
     def _on_motion(self, event) -> None:
+        if not self._geo:
+            return
+        _, _, pad_t, plot_h = self._geo
+        if not (pad_t <= event.y <= pad_t + plot_h):
+            self._set_hover(None)
+            return
         idx = self._day_at(event.x)
         if idx != self._hover:
             self._set_hover(idx)
@@ -134,6 +140,11 @@ class WeekTab(tk.Frame):
         self._draw()
 
     def _on_click(self, event) -> None:
+        if not self._geo:
+            return
+        _, _, pad_t, plot_h = self._geo
+        if not (pad_t <= event.y <= pad_t + plot_h):
+            return
         idx = self._day_at(event.x)
         if idx is not None and self.on_day_click:
             self.on_day_click(self.days[idx].day)

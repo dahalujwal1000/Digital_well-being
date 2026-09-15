@@ -107,26 +107,29 @@ class SessionsTab(tk.Frame):
                      bg=CARD, fg=SUB, font=("Segoe UI", 10)).pack(side="left")
 
 
+def _set_bg_tree(widget: tk.Widget, bg: str) -> None:
+    try:
+        widget.config(bg=bg)
+    except Exception:
+        pass
+    for child in widget.winfo_children():
+        _set_bg_tree(child, bg)
+
+
 def _bind_hover(card: tk.Frame, normal: str = CARD,
                 hover: str = "#1a2233") -> None:
     """Brighten a card (and all descendants) while the cursor is over it."""
 
     def enter(_e=None) -> None:
-        card.config(bg=hover)
-        for w in card.winfo_children():
-            try:
-                w.config(bg=hover)
-            except Exception:
-                pass
+        _set_bg_tree(card, hover)
 
     def leave(_e=None) -> None:
-        card.config(bg=normal)
-        for w in card.winfo_children():
-            try:
-                w.config(bg=normal)
-            except Exception:
-                pass
+        _set_bg_tree(card, normal)
 
-    for w in [card] + card.winfo_children():
+    def _bind_recursive(w: tk.Widget) -> None:
         w.bind("<Enter>", enter, add="+")
         w.bind("<Leave>", leave, add="+")
+        for child in w.winfo_children():
+            _bind_recursive(child)
+
+    _bind_recursive(card)

@@ -37,10 +37,24 @@ class StoreTests(unittest.TestCase):
 
     def test_crash_recovery(self):
         sid = self.store.open_session("2026-09-13", "2026-09-13 10:00:00")
-        self.store.recover_crashed("2026-09-13 11:00:00")
+        self.store.update_session_time(sid, 120, 30)
+        self.store.recover_crashed("2026-09-13 18:00:00")
         row = self.store.get_session(sid)
         self.assertEqual(row[3], "CRASH")  # open session was closed
-        self.assertIsNotNone(row[2])
+        self.assertEqual(row[2], "2026-09-13 10:02:30")  # clamped to boot + tracked
+
+    def test_day_totals_sums_all_sessions(self):
+        s1 = self.store.open_session("2026-09-13", "2026-09-13 09:00:00")
+        self.store.update_session_time(s1, 100, 20)
+        self.store.close_session(s1, "2026-09-13 10:00:00", "SLEEP")
+
+        s2 = self.store.open_session("2026-09-13", "2026-09-13 11:00:00")
+        self.store.update_session_time(s2, 50, 10)
+        self.store.close_session(s2, "2026-09-13 12:00:00", "SHUTDOWN")
+
+        active, idle = self.store.day_totals("2026-09-13")
+        self.assertEqual(active, 150)
+        self.assertEqual(idle, 30)
 
     def test_app_usage_upsert_accumulates(self):
         self.store.add_app_time("2026-09-13", 10, "VS Code", "code.exe",
