@@ -31,7 +31,7 @@ def _real():
 
 
 def get_day(day):
-    global _mode
+    global _mode, _mock_warned
     p = _real()
     if p:
         try:

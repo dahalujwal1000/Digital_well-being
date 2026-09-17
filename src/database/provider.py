@@ -33,7 +33,9 @@ def available() -> bool:
 
 
 def _color_for(exe: str, index: int) -> str:
-    return APP_COLORS.get(exe, _FALLBACK_COLORS[index % len(_FALLBACK_COLORS)])
+    colors = {name.casefold(): color for name, color in APP_COLORS.items()}
+    return colors.get(exe.casefold(),
+                      _FALLBACK_COLORS[index % len(_FALLBACK_COLORS)])
 
 
 def _to_seconds(iso: str) -> int:
@@ -83,8 +85,9 @@ def get_day(day) -> DayStats:
     stats.unlocks = store.unlocks_for_day(date_str)
     stats.hourly_active, stats.hourly_idle = store.hourly_for_day(date_str)
 
-    for i, (app_name, _title, sec) in enumerate(store.apps_for_day(date_str)):
-        exe = app_name.lower()
+    for i, (app_name, _title, sec, exe) in enumerate(
+            store.apps_for_day(date_str)):
+        exe = exe or app_name
         color = _color_for(exe, i)
         stats.apps.append(AppUsage(name=app_name, process=exe, color=color,
                                    active_sec=sec))

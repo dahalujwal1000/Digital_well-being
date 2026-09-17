@@ -1,99 +1,68 @@
-"""Apps tab: per-app time list, Android-Dashboard style."""
-
+"""Searchable app and website usage."""
 import tkinter as tk
-
-from src.dashboard.mock_data import DayStats
-from src.dashboard.widgets.app_row import AppRow
-
-BG = "#0f1420"
-SUB = "#8b93a7"
+from src.dashboard.theme import (
+    Page, label, heading, button, usage_row, BG, SURFACE, TEXT,
+    MUTED, ACCENT, TINT, LINE, FONT)
+from src.utils.time_format import fmt_hm
 
 
-class AppsTab(tk.Frame):
+class AppsTab(Page):
     def __init__(self, master, **kw):
-        super().__init__(master, bg=BG, **kw)
+        super().__init__(master, **kw)
+        heading(self.content, "Where your time goes",
+                "Explore the apps and websites you used on the selected day.")
+        controls = tk.Frame(self.content, bg=BG)
+        controls.pack(fill="x", pady=(0, 14))
+        self.kind = "Apps"
+        self.buttons = {}
+        for name in ("Apps", "Websites"):
+            b = button(controls, name, lambda n=name: self._select(n))
+            b.pack(side="left", padx=(0, 8))
+            self.buttons[name] = b
+        self.query = tk.StringVar()
+        label(controls, "Search", color=MUTED).pack(side="left", padx=(16, 8))
+        self.search = tk.Entry(controls, textvariable=self.query,
+                               bg=SURFACE, fg=TEXT, insertbackground=ACCENT,
+                               font=(FONT, 11), relief="flat",
+                               highlightthickness=1, highlightbackground=LINE,
+                               highlightcolor=ACCENT)
+        self.search.pack(side="left", fill="x", expand=True, ipady=9)
+        self.query.trace_add("write", lambda *_: self._draw())
+        self.note = label(self.content, "", color=MUTED, anchor="w",
+                           wraplength=620, justify="left")
+        self.note.pack(fill="x", pady=(0, 18))
+        self.rows = tk.Frame(self.content, bg=BG)
+        self.rows.pack(fill="x")
+        self.stats = None
+        self._select("Apps")
 
-        header = tk.Frame(self, bg=BG)
-        header.pack(fill="x", padx=24, pady=(16, 8))
-        tk.Label(header, text="TOP APPS", bg=BG, fg=SUB,
-                 font=("Segoe UI", 10, "bold")).pack(side="left")
-        self.total_lbl = tk.Label(header, text="", bg=BG, fg=SUB,
-                                  font=("Segoe UI", 10))
-        self.total_lbl.pack(side="right")
+    def _select(self, name):
+        self.kind = name
+        for key, b in self.buttons.items():
+            b.configure(bg=ACCENT if key == name else TINT,
+                        fg="white" if key == name else ACCENT)
+        self._draw()
 
-        # scrollable list
-        self.canvas = tk.Canvas(self, bg=BG, highlightthickness=0)
-        self.scroll = tk.Scrollbar(self, orient="vertical",
-                                   command=self.canvas.yview)
-        self.inner = tk.Frame(self.canvas, bg=BG)
-        self.inner.bind("<Configure>", lambda e: self.canvas.configure(
-            scrollregion=self.canvas.bbox("all")))
-        self.canvas_window = self.canvas.create_window(
-            (0, 0), window=self.inner, anchor="nw")
-        self.canvas.bind("<Configure>", lambda e: self.canvas.itemconfigure(
-            self.canvas_window, width=e.width - 4))
-        self.canvas.configure(yscrollcommand=self.scroll.set)
-        self.canvas.pack(side="left", fill="both", expand=True,
-                         padx=(24, 0), pady=(0, 16))
-        self.scroll.pack(side="right", fill="y", pady=(0, 16), padx=(6, 20))
-        # mouse-wheel scrolling (add="+" so it doesn't clobber other
-        # tabs' bind_all handlers) + pull-to-refresh overscroll hook
-        self.on_pull_top = None   # set by app.py -> PullRefresher.tick
-        self.canvas.bind_all("<MouseWheel>", self._on_wheel, add="+")
+    def render(self, stats):
+        self.stats = stats
+        self._draw()
 
-        # empty-state message for days with no tracking data
-        self.empty = tk.Label(
-            self, text="No app data for this day yet.\n"
-                       "Is the tracker running?",
-            bg=BG, fg=SUB, font=("Segoe UI", 11), anchor="center", pady=30)
-
-    def _on_wheel(self, event) -> None:
-        # bind_all fires for every scroll event in the app; scroll only if
-        # the widget under the mouse belongs to THIS tab's canvas.
-        w = getattr(event, "widget", None)
-        while w is not None:
-            if w is self.canvas:
-                delta = int(event.delta / 120)
-                if delta > 0 and self.canvas.yview()[0] <= 0.001:
-                    # overscroll at the top -> pull-to-refresh tick
-                    if self.on_pull_top:
-                        self.on_pull_top()
-                    return
-                self.canvas.yview_scroll(-1 * delta, "units")
-                return
-            w = getattr(w, "master", None)
-
-    def render(self, stats: DayStats) -> None:
-        for w in self.inner.winfo_children():
-            w.destroy()
-        if not stats.apps and not stats.websites:
-            self.total_lbl.config(text="")
-            self.empty.pack(in_=self.inner, fill="x", expand=True)
+    def _draw(self):
+        if self.stats is None:
             return
-        self.empty.pack_forget()
-        total = max(1, sum(a.active_sec for a in stats.apps))
-        self.total_lbl.config(text=f"Total active {total // 3600}h "
-                                   f"{total % 3600 // 60}m")
-
-        if stats.apps:
-            app_total = max(1, sum(a.active_sec for a in stats.apps))
-            tk.Label(self.inner, text="TOP APPS", bg=BG, fg=SUB,
-                     font=("Segoe UI", 9, "bold")).pack(anchor="w", pady=(0, 6))
-            for app in stats.apps:
-                row = AppRow(self.inner, name=app.name, process=app.process,
-                             color=app.color, seconds=app.active_sec,
-                             frac=app.active_sec / app_total)
-                row.pack(fill="x", pady=(0, 8))
-
-        # --- TOP WEBSITES (inside browsers) ---
-        if stats.websites:
-            web_total = max(1, sum(w.active_sec for w in stats.websites))
-            tk.Label(self.inner, text="TOP WEBSITES  (inside browsers)",
-                     bg=BG, fg=SUB,
-                     font=("Segoe UI", 9, "bold")).pack(anchor="w",
-                                                        pady=(14, 6))
-            for site in stats.websites:
-                row = AppRow(self.inner, name=site.name, process="web page",
-                             color=site.color, seconds=site.active_sec,
-                             frac=site.active_sec / web_total)
-                row.pack(fill="x", pady=(0, 8))
+        for w in self.rows.winfo_children():
+            w.destroy()
+        items = self.stats.apps if self.kind == "Apps" else self.stats.websites
+        total = sum(a.active_sec for a in items)
+        self.note.configure(text=(
+            f"{fmt_hm(total)} recorded across {len(items)} apps"
+            if self.kind == "Apps" else
+            "Website estimates come from browser window titles and are part of browser time."))
+        matches = [a for a in items if self.query.get().casefold() in a.name.casefold()]
+        for item in sorted(matches, key=lambda a: a.active_sec, reverse=True):
+            usage_row(self.rows, item.name, item.active_sec,
+                      item.active_sec/max(1, total))
+        if not matches:
+            label(self.rows, "No matching results." if self.query.get()
+                  else "No usage recorded for this day.", color=MUTED).pack(
+                      anchor="w", pady=28)

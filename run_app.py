@@ -7,11 +7,20 @@ the background tracker (system tray) or the dashboard window:
     DigitalWellbeing.exe --dashboard    # open the dashboard window
     DigitalWellbeing.exe --no-tray      # headless tracker, Ctrl+C to stop (testing)
     DigitalWellbeing.exe --duration N   # headless tracker for N seconds (testing)
+    DigitalWellbeing.exe --autostart-status        # show the startup setting
+    DigitalWellbeing.exe --enable-autostart        # start at logon (auto mechanism)
+    DigitalWellbeing.exe --disable-autostart       # stop starting at logon
 
 For development you can run the same thing from source:
 
     python run_app.py                 # same as the first line above
     python run_app.py --dashboard     # same as --dashboard above
+
+Autostart mechanics (see src/utils/autostart.py): an on-logon Task Scheduler
+task is preferred and needs an administrator process, so pass
+``--enable-autostart --autostart-mode task`` from an elevated prompt (the
+installer does exactly that). Without admin rights the same switch falls back
+to the per-user HKCU Run key, so "Start with Windows" always works.
 """
 
 import argparse
@@ -57,6 +66,12 @@ def _run_tracker(args: argparse.Namespace) -> None:
     _acquire_single_instance()
     from src.core.tracker import Tracker
     from src.tray.tray_app import TrayApp
+    from src.utils import autostart
+
+    # exactly one autostart entry: if a logon task was added next to an older
+    # Run key value, drop the Run key (the single-instance mutex is the
+    # backstop, this keeps the log clean)
+    autostart.reconcile()
 
     try:
         tracker = Tracker()
@@ -94,6 +109,33 @@ def _run_dashboard() -> None:
     app.mainloop()
 
 
+def _run_autostart_command(args: argparse.Namespace) -> None:
+    """Handle the autostart switches and exit (also used elevated via UAC)."""
+    from src.utils import autostart
+
+    if args.autostart_status:
+        print(autostart.status_line())
+        if autostart.mechanism() != autostart.TASK:
+            print("Tip: '--enable-autostart --autostart-mode task' installs "
+                  "the recommended on-logon task"
+                  + ("" if autostart.elevated()
+                     else " (use an administrator prompt if this machine "
+                          "refuses it)"))
+        return
+
+    try:
+        if args.enable_autostart:
+            used = autostart.enable(args.autostart_mode)
+            print(f"Autostart enabled {autostart.describe(used)}.")
+        else:
+            autostart.disable()
+            print("Autostart disabled.")
+    except autostart.AutostartError as exc:
+        log.error("autostart command failed: %s", exc)
+        print(f"ERROR: {exc}")
+        sys.exit(2)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dashboard", action="store_true",
@@ -102,9 +144,22 @@ def main() -> None:
                         help="run the tracker headless (no tray icon)")
     parser.add_argument("--duration", type=int, default=0,
                         help="headless tracker test run for N seconds")
+    parser.add_argument("--autostart-status", action="store_true",
+                        help="print the 'start with Windows' setting and exit")
+    parser.add_argument("--enable-autostart", action="store_true",
+                        help="start automatically at logon, then exit")
+    parser.add_argument("--disable-autostart", action="store_true",
+                        help="stop starting automatically at logon, then exit")
+    parser.add_argument("--autostart-mode", choices=("auto", "task", "run"),
+                        default="auto",
+                        help="autostart mechanism: 'task' (Task Scheduler, "
+                             "needs administrator rights), 'run' (HKCU Run "
+                             "key) or 'auto' (task when allowed, else run)")
     args = parser.parse_args()
 
-    if args.dashboard:
+    if args.autostart_status or args.enable_autostart or args.disable_autostart:
+        _run_autostart_command(args)
+    elif args.dashboard:
         _run_dashboard()
     else:
         _run_tracker(args)

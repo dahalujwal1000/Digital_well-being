@@ -5,7 +5,7 @@
 ; Start Menu shortcut, optional autostart and a clean uninstaller.
 
 #define MyAppName "Digital Wellbeing"
-#define MyAppVersion "1.2.0"
+#define MyAppVersion "1.3.2"
 #define MyAppPublisher "Digital Wellbeing"
 #define MyAppExeName "DigitalWellbeing.exe"
 
@@ -28,6 +28,11 @@ UninstallDisplayIcon={app}\{#MyAppExeName}
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; \
     GroupDescription: "{cm:AdditionalIcons}"
+; autostart is implemented as a Windows Task Scheduler "on logon" task
+; (30s after logon, never stopped by battery mode, restarted by Windows if it
+; crashes). The app owns both mechanisms in src/utils/autostart.py - the
+; installer only asks it to switch it on, so the installer and the tray
+; toggle can never desync into two autostart entries.
 Name: "autostart"; Description: "Start Digital Wellbeing when I log in"; \
     GroupDescription: "Startup:"
 
@@ -41,21 +46,30 @@ Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; \
 Name: "{group}\{#MyAppName} (Tracker)"; Filename: "{app}\{#MyAppExeName}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; \
     Parameters: "--dashboard"; Tasks: desktopicon
-; optional login autostart via the HKCU Run key - the SAME mechanism the
-; tray toggle ("Start with Windows") reads/writes, so installer + app can
-; never desync into double autostart entries
-[Registry]
-Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; \
-    ValueType: string; ValueName: "DigitalWellbeing"; \
-    ValueData: """{app}\{#MyAppExeName}"""; Tasks: autostart; \
-    Flags: uninsdeletevalue
+; autostart is owned by the app (src/utils/autostart.py): the installer only
+; asks it to switch on the Windows Task Scheduler "on logon" task, which needs
+; the elevated process the installer already has - and enabling it also clears
+; a legacy HKCU Run key value left by v1.2 setups, so there is exactly one
+; autostart entry at all times.
 
 [Run]
+Filename: "{app}\{#MyAppExeName}"; \
+    Parameters: "--enable-autostart --autostart-mode task"; \
+    Flags: runhidden; Tasks: autostart; \
+    StatusMsg: "Registering the 'start at logon' task..."
+Filename: "{app}\{#MyAppExeName}"; \
+    Flags: nowait runasoriginaluser skipifsilent; \
+    StatusMsg: "Starting Digital Wellbeing..."
 Filename: "{app}\{#MyAppExeName}"; Parameters: "--dashboard"; \
     Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait \
-    postinstall skipifsilent
+    postinstall runasoriginaluser skipifsilent
 
 [UninstallRun]
-; note: the uninstaller cannot kill a running process itself; ask the user
-; to exit from the tray icon first (Exit). Registry autostart written by
-; the app's own toggle is under HKCU\...\Run "DigitalWellbeing".
+; Let the app undo its own autostart entry (the same code the tray toggle
+; calls), then let schtasks clean up even if the exe was locked by a running
+; tracker and therefore could not be run above.
+Filename: "{app}\{#MyAppExeName}"; Parameters: "--disable-autostart"; \
+    Flags: runhidden; RunOnceId: "DwAutostartOff"
+Filename: "{sys}\schtasks.exe"; \
+    Parameters: "/delete /tn ""DigitalWellbeing"" /f"; \
+    Flags: runhidden; RunOnceId: "DwAutostartTaskCleanup"

@@ -135,10 +135,21 @@ class Store:
 
     # ------------------------------------------------------------ sessions --
     def open_session(self, date_str: str, boot_iso: str) -> int:
-        self._exec(
-            "INSERT INTO sessions(date, boot_time, end_reason) "
-            "VALUES(?, ?, 'RUNNING')", (date_str, boot_iso))
-        return self._query("SELECT last_insert_rowid()")[0][0]
+        sql = ("INSERT INTO sessions(date, boot_time, end_reason) "
+               "VALUES(?, ?, 'RUNNING')")
+        params = (date_str, boot_iso)
+        with self._lock:
+            try:
+                cursor = self._con.execute(sql, params)
+                self._con.commit()
+            except (sqlite3.OperationalError,
+                    sqlite3.ProgrammingError) as exc:
+                log.warning("SQLite session insert error (%s) - "
+                            "reconnecting", exc)
+                self._reconnect()
+                cursor = self._con.execute(sql, params)
+                self._con.commit()
+            return cursor.lastrowid
 
     def recover_crashed(self, now_iso: str) -> int:
         """Close sessions left RUNNING by a crash/previous run. Returns count.
@@ -187,6 +198,61 @@ class Store:
         self._exec(
             "UPDATE sessions SET active_sec = active_sec + ?, "
             "idle_sec = idle_sec + ? WHERE id = ?", (active, idle, sid))
+
+    def apply_flush(self, sid: int, app_rows: list, hourly_rows: list,
+                    web_rows: list, active: int, idle: int) -> None:
+        """Persist one tracker snapshot atomically."""
+        with self._lock:
+            for attempt in range(2):
+                try:
+                    for date_str, hour, app_name, exe, title, sec in app_rows:
+                        self._con.execute(
+                            "INSERT INTO app_usage(date, hour, app_name, "
+                            "exe_path, window_title, active_sec) "
+                            "VALUES(?,?,?,?,?,?) "
+                            "ON CONFLICT(date, hour, app_name) DO UPDATE SET "
+                            "exe_path = excluded.exe_path, "
+                            "window_title = excluded.window_title, "
+                            "active_sec = active_sec + excluded.active_sec",
+                            (date_str, hour, app_name, exe, title, sec))
+                    for date_str, hour, act, idle_sec in hourly_rows:
+                        self._con.execute(
+                            "INSERT INTO hourly(date, hour, active_sec, "
+                            "idle_sec) VALUES(?,?,?,?) "
+                            "ON CONFLICT(date, hour) DO UPDATE SET "
+                            "active_sec = active_sec + excluded.active_sec, "
+                            "idle_sec = idle_sec + excluded.idle_sec",
+                            (date_str, hour, act, idle_sec))
+                    for date_str, hour, site, sec in web_rows:
+                        self._con.execute(
+                            "INSERT INTO web_usage(date, hour, site, "
+                            "active_sec) VALUES(?,?,?,?) "
+                            "ON CONFLICT(date, hour, site) DO UPDATE SET "
+                            "active_sec = active_sec + excluded.active_sec",
+                            (date_str, hour, site, sec))
+                    if active or idle:
+                        self._con.execute(
+                            "UPDATE sessions SET active_sec = active_sec + ?, "
+                            "idle_sec = idle_sec + ? WHERE id = ?",
+                            (active, idle, sid))
+                    self._con.commit()
+                    return
+                except (sqlite3.OperationalError,
+                        sqlite3.ProgrammingError) as exc:
+                    try:
+                        self._con.rollback()
+                    except sqlite3.Error:
+                        pass
+                    if attempt:
+                        raise
+                    log.warning("SQLite flush error (%s) - reconnecting", exc)
+                    self._reconnect()
+                except Exception:
+                    try:
+                        self._con.rollback()
+                    except sqlite3.Error:
+                        pass
+                    raise
 
     def get_session(self, sid: int):
         rows = self._query(
@@ -241,7 +307,8 @@ class Store:
 
     def apps_for_day(self, date_str: str):
         return self._query(
-            "SELECT app_name, MAX(window_title), SUM(active_sec) "
+            "SELECT app_name, MAX(window_title), SUM(active_sec), "
+            "MAX(exe_path) "
             "FROM app_usage WHERE date = ? GROUP BY app_name "
             "ORDER BY SUM(active_sec) DESC", (date_str,))
 

@@ -8,8 +8,8 @@ import tkinter as tk
 
 from src.utils.time_format import fmt_hm, hour_label
 
-HOVER_LIGHTEN = "#7fd7ff"   # active bar when hovered
-HOVER_IDLE = "#7a849e"      # idle bar when hovered
+HOVER_LIGHTEN = "#348160"
+HOVER_IDLE = "#93AD9E"
 
 
 class HourlyBarChart(tk.Canvas):
@@ -44,7 +44,7 @@ class HourlyBarChart(tk.Canvas):
         pad_l, pad_b, pad_t = 52, 22, 10
         plot_h = h - pad_b - pad_t
         plot_w = w - pad_l - 12
-        peak = max(1, max(a + i for a, i in zip(self.active, self.idle)))
+        peak = max(60, max(a + i for a, i in zip(self.active, self.idle)))
         bar_area = plot_w / 24
         bar_w = max(4, int(bar_area * 0.62))
         self._geo = (pad_l, bar_area, bar_w, pad_t, plot_h, h, peak)
@@ -56,7 +56,7 @@ class HourlyBarChart(tk.Canvas):
             self.create_line(pad_l, y, w - 12, y, fill=c["grid"])
             value = int(peak * frac)
             self.create_text(pad_l - 6, y, text=fmt_hm(value),
-                             fill=c["label"], font=("Segoe UI", 8),
+                             fill=c["label"], font=("Segoe UI", 10),
                              anchor="e")
 
         for hour in range(24):
@@ -81,10 +81,10 @@ class HourlyBarChart(tk.Canvas):
                                           x + bar_w, pad_t + plot_h - h_idl,
                                           fill=act_c, width=0)
             # every-2-hour labels
-            if hour % 2 == 0:
+            if hour % (4 if w < 750 else 2) == 0:
                 lx = pad_l + hour * bar_area + bar_area / 2
                 self.create_text(lx, h - pad_b / 2 + 1, text=hour_label(hour),
-                                 fill=c["label"], font=("Segoe UI", 8))
+                                 fill=c["label"], font=("Segoe UI", 10))
 
     # --------------------------------------------------------- interaction --
     def _hour_at(self, x: int) -> int | None:
@@ -125,10 +125,11 @@ class HourlyBarChart(tk.Canvas):
         if a + i == 0:
             return
         _, bar_area, _, pad_t, _, _, _ = self._geo
-        cx = 52 + hour * bar_area + bar_area / 2
+        cx = min(max(52, 52 + hour * bar_area + bar_area / 2),
+                 max(52, self.winfo_width() - 240))
         lines = (f"{hour_label(hour)}\n"
                  f"Active {fmt_hm(a)}   •   Idle {fmt_hm(i)}")
         self._tip = self.create_text(
-            cx, pad_t + 4, text=lines, fill="#eaf0ff",
+            cx, pad_t + 4, text=lines, fill="#202A25",
             font=("Segoe UI", 9), anchor="nw", justify="left")
 

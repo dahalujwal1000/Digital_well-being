@@ -1,7 +1,9 @@
 """Unit tests for the SQLite store (no GUI, temp DB)."""
 
 import sys
+import sqlite3
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 
@@ -9,6 +11,11 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from src.database.db import Store  # noqa: E402
+
+try:                                # python -m unittest tests.test_db
+    from . import _quiet          # noqa: F401,E402 - keeps the app log clean
+except ImportError:                 # python -m unittest discover -s tests
+    import _quiet                 # noqa: F401,E402
 
 
 class StoreTests(unittest.TestCase):
@@ -95,6 +102,48 @@ class StoreTests(unittest.TestCase):
         # and writes work again afterwards
         self.store.add_app_time("2026-09-13", 10, "Test", "t.exe", "", 5)
         self.assertEqual(len(self.store.apps_for_day("2026-09-13")), 1)
+
+    def test_flush_batch_rolls_back_as_one_transaction(self):
+        sid = self.store.open_session(
+            "2026-09-13", "2026-09-13 10:00:00")
+        self.store._exec(
+            "CREATE TRIGGER reject_web BEFORE INSERT ON web_usage "
+            "BEGIN SELECT RAISE(ABORT, 'rejected'); END")
+
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.store.apply_flush(
+                sid,
+                [("2026-09-13", 10, "VS Code", "Code.exe", "x", 10)],
+                [("2026-09-13", 10, 10, 0)],
+                [("2026-09-13", 10, "GitHub", 10)],
+                10, 0)
+
+        self.assertEqual(self.store.apps_for_day("2026-09-13"), [])
+        self.assertEqual(self.store.day_totals("2026-09-13"), (0, 0))
+
+    def test_concurrent_session_open_returns_unique_ids(self):
+        ids = []
+        errors = []
+        result_lock = threading.Lock()
+
+        def open_one(index):
+            try:
+                sid = self.store.open_session(
+                    "2026-09-13", f"2026-09-13 10:00:{index:02d}")
+                with result_lock:
+                    ids.append(sid)
+            except Exception as exc:
+                errors.append(exc)
+
+        threads = [threading.Thread(target=open_one, args=(i,))
+                   for i in range(20)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+        self.assertEqual(errors, [])
+        self.assertEqual(len(set(ids)), 20)
 
 
 if __name__ == "__main__":

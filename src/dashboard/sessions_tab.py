@@ -1,135 +1,40 @@
-"""Sessions tab: laptop open sessions timeline (restart-proof proof)."""
-
+"""Readable chronological device sessions."""
 import tkinter as tk
-
-from src.dashboard.mock_data import DayStats
+from src.dashboard.theme import Page, label, heading, BG, SURFACE, MUTED, ACCENT
 from src.utils.time_format import fmt_clock, fmt_hm
 
-BG = "#0f1420"
-CARD = "#141a28"
-FG = "#eaf0ff"
-SUB = "#8b93a7"
-
-REASON_LABEL = {
-    "SHUTDOWN": "Shutdown",
-    "RESTART": "Restart",
-    "SLEEP": "Sleep",
-    "LOCK": "Locked",
-    "CRASH": "Unexpected end",
-    "RUNNING": "Running now",
-}
+REASONS = {"RUNNING": "In progress", "SLEEP": "Sleep", "SHUTDOWN": "Shutdown",
+           "RESTART": "Restart", "CRASH": "Unexpected end", "LOGOFF": "Signed out",
+           "MIDNIGHT": "New day", "LOCK": "Locked"}
 
 
-class SessionsTab(tk.Frame):
+class SessionsTab(Page):
     def __init__(self, master, **kw):
-        super().__init__(master, bg=BG, **kw)
+        super().__init__(master, **kw)
+        heading(self.content, "Your sessions",
+                "A timeline of device use, from start to sleep or shutdown.")
+        self.summary = label(self.content, "", color=MUTED)
+        self.summary.pack(anchor="w", pady=(0, 18))
+        self.rows = tk.Frame(self.content, bg=BG)
+        self.rows.pack(fill="x")
 
-        header = tk.Frame(self, bg=BG)
-        header.pack(fill="x", padx=24, pady=(16, 8))
-        tk.Label(header, text="LAPTOP SESSIONS", bg=BG, fg=SUB,
-                 font=("Segoe UI", 10, "bold")).pack(side="left")
-        tk.Label(header, text="Open time is tracked across restarts — "
-                              "each boot is its own session",
-                 bg=BG, fg=SUB, font=("Segoe UI", 9)).pack(side="right")
-
-        self.canvas = tk.Canvas(self, bg=BG, highlightthickness=0)
-        self.scroll = tk.Scrollbar(self, orient="vertical",
-                                   command=self.canvas.yview)
-        self.inner = tk.Frame(self.canvas, bg=BG)
-        self.inner.bind("<Configure>", lambda e: self.canvas.configure(
-            scrollregion=self.canvas.bbox("all")))
-        self.canvas_window = self.canvas.create_window(
-            (0, 0), window=self.inner, anchor="nw")
-        self.canvas.bind("<Configure>", lambda e: self.canvas.itemconfigure(
-            self.canvas_window, width=e.width - 4))
-        self.canvas.configure(yscrollcommand=self.scroll.set)
-        self.canvas.pack(side="left", fill="both", expand=True,
-                         padx=(24, 0), pady=(0, 16))
-        self.scroll.pack(side="right", fill="y", pady=(0, 16), padx=(6, 20))
-        # wheel scrolling (add="+" so it doesn't clobber other tabs'
-        # bind_all handlers) + pull-to-refresh overscroll hook
-        self.on_pull_top = None   # set by app.py -> PullRefresher.tick
-        self.canvas.bind_all("<MouseWheel>", self._on_wheel, add="+")
-
-        # empty-state message for days with no tracking data
-        self.empty = tk.Label(
-            self, text="No sessions for this day yet.\n"
-                       "Is the tracker running?",
-            bg=BG, fg=SUB, font=("Segoe UI", 11), anchor="center", pady=30)
-
-    def _on_wheel(self, event) -> None:
-        # bind_all fires for every scroll event in the app; scroll only if
-        # the widget under the mouse belongs to THIS tab's canvas.
-        w = getattr(event, "widget", None)
-        while w is not None:
-            if w is self.canvas:
-                delta = int(event.delta / 120)
-                if delta > 0 and self.canvas.yview()[0] <= 0.001:
-                    # overscroll at the top -> pull-to-refresh tick
-                    if self.on_pull_top:
-                        self.on_pull_top()
-                    return
-                self.canvas.yview_scroll(-1 * delta, "units")
-                return
-            w = getattr(w, "master", None)
-
-    def render(self, stats: DayStats) -> None:
-        for w in self.inner.winfo_children():
+    def render(self, stats):
+        for w in self.rows.winfo_children():
             w.destroy()
+        self.summary.configure(text=f"{len(stats.sessions)} sessions on this day")
         if not stats.sessions:
-            self.empty.pack(in_=self.inner, fill="x", expand=True)
-            return
-        self.empty.pack_forget()
+            label(self.rows, "No sessions recorded for this day.",
+                  color=MUTED).pack(anchor="w", pady=24)
         for s in stats.sessions:
-            card = tk.Frame(self.inner, bg=CARD)
-            card.pack(fill="x", pady=(0, 10))
-            _bind_hover(card)
-
-            top = tk.Frame(card, bg=CARD)
-            top.pack(fill="x", padx=14, pady=(10, 2))
-            tk.Label(top,
-                     text=f"{fmt_clock(s.start_sec)}  –  {fmt_clock(s.end_sec)}",
-                     bg=CARD, fg=FG,
-                     font=("Segoe UI Semibold", 11)).pack(side="left")
-            tk.Label(top, text=REASON_LABEL.get(s.reason, s.reason),
-                     bg=CARD, fg=SUB, font=("Segoe UI", 9)).pack(side="right")
-
-            bottom = tk.Frame(card, bg=CARD)
-            bottom.pack(fill="x", padx=14, pady=(0, 12))
-            tk.Label(bottom, text=f"Active {fmt_hm(s.active_sec)}",
-                     bg=CARD, fg="#4fc3f7",
-                     font=("Segoe UI", 10)).pack(side="left", padx=(0, 16))
-            tk.Label(bottom, text=f"Idle {fmt_hm(s.idle_sec)}",
-                     bg=CARD, fg=SUB, font=("Segoe UI", 10)).pack(
-                side="left", padx=(0, 16))
-            tk.Label(bottom,
-                     text=f"Open {fmt_hm(s.end_sec - s.start_sec)}",
-                     bg=CARD, fg=SUB, font=("Segoe UI", 10)).pack(side="left")
-
-
-def _set_bg_tree(widget: tk.Widget, bg: str) -> None:
-    try:
-        widget.config(bg=bg)
-    except Exception:
-        pass
-    for child in widget.winfo_children():
-        _set_bg_tree(child, bg)
-
-
-def _bind_hover(card: tk.Frame, normal: str = CARD,
-                hover: str = "#1a2233") -> None:
-    """Brighten a card (and all descendants) while the cursor is over it."""
-
-    def enter(_e=None) -> None:
-        _set_bg_tree(card, hover)
-
-    def leave(_e=None) -> None:
-        _set_bg_tree(card, normal)
-
-    def _bind_recursive(w: tk.Widget) -> None:
-        w.bind("<Enter>", enter, add="+")
-        w.bind("<Leave>", leave, add="+")
-        for child in w.winfo_children():
-            _bind_recursive(child)
-
-    _bind_recursive(card)
+            row = tk.Frame(self.rows, bg=SURFACE, padx=20, pady=20)
+            row.pack(fill="x", pady=(0, 12))
+            top = tk.Frame(row, bg=SURFACE)
+            top.pack(fill="x")
+            label(top, f"{fmt_clock(s.start_sec)} — {fmt_clock(s.end_sec)}",
+                  13, True).pack(side="left")
+            label(top, REASONS.get(s.reason, s.reason), 10,
+                  color=ACCENT if s.reason == "RUNNING" else MUTED).pack(side="right")
+            label(row, f"Active {fmt_hm(s.active_sec)}     ·     "
+                       f"Idle {fmt_hm(s.idle_sec)}     ·     "
+                       f"Open {fmt_hm(max(0, s.end_sec-s.start_sec))}",
+                  color=MUTED).pack(anchor="w", pady=(12, 0))

@@ -4,6 +4,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -11,6 +12,11 @@ sys.path.insert(0, str(ROOT))
 import src.core.tracker as tracker_mod  # noqa: E402
 from src.core.tracker import Tracker  # noqa: E402
 from src.database.db import Store  # noqa: E402
+
+try:                                    # python -m unittest tests.test_tracker
+    from . import _quiet              # noqa: F401,E402 - keeps the app log clean
+except ImportError:                     # python -m unittest discover -s tests
+    import _quiet                     # noqa: F401,E402
 
 
 class TrackerTests(unittest.TestCase):
@@ -100,6 +106,45 @@ class TrackerTests(unittest.TestCase):
         date_str = self.tracker._date_str()
         apps = dict((r[0], r[2]) for r in self.store.apps_for_day(date_str))
         self.assertEqual(apps.get("VS Code"), 20)   # 200 * 0.1
+
+    def test_duplicate_resume_opens_only_one_session(self):
+        self.tracker._on_suspend()
+        self.tracker._on_resume()
+        resumed_sid = self.tracker.session_id
+        self.tracker._on_resume()
+
+        rows = self.store._query(
+            "SELECT id, end_reason FROM sessions ORDER BY id")
+        running = [sid for sid, reason in rows if reason == "RUNNING"]
+        self.assertEqual(running, [resumed_sid])
+
+    def test_resume_refreshes_session_date_after_midnight(self):
+        self.tracker._session_date = "1999-12-31"
+        self.tracker._on_suspend()
+        self.tracker._on_resume()
+        self.assertEqual(
+            self.tracker._session_date, self.tracker._date_str())
+
+    def test_suspend_prevents_ticks(self):
+        tracker_mod.get_idle_seconds = lambda: 0.0
+        tracker_mod.get_foreground = lambda: (1, "Code.exe", "x")
+        self.tracker._on_suspend()
+        self.tracker._tick(10)
+        self.assertEqual(self.tracker.today_totals(), (0, 0))
+
+    def test_failed_flush_keeps_pending_data_for_retry(self):
+        tracker_mod.get_idle_seconds = lambda: 0.0
+        tracker_mod.get_foreground = lambda: (1, "Code.exe", "x")
+        self.tracker._tick(10)
+
+        with mock.patch.object(
+                self.store, "apply_flush", side_effect=RuntimeError("disk")):
+            self.tracker._flush()
+        self.assertEqual(self.tracker.today_totals()[0], 10)
+
+        self.tracker._flush()
+        self.assertEqual(
+            self.store.day_totals(self.tracker._date_str())[0], 10)
 
 
 if __name__ == "__main__":

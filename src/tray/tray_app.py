@@ -1,4 +1,4 @@
-"""System tray icon: Open Dashboard, autostart toggle, today's time, Exit."""
+"""System tray icon: Open Dashboard, today's time, startup settings, Exit."""
 
 import subprocess
 import sys
@@ -59,12 +59,47 @@ class TrayApp:
                 pystray.MenuItem("Start with Windows",
                                  self._toggle_autostart,
                                  checked=lambda item: autostart.is_enabled()),
+                pystray.MenuItem(lambda item:
+                                 f"Startup: {autostart.describe()}",
+                                 lambda *_: None, enabled=False),
+                pystray.MenuItem("Use startup task (admin)...",
+                                 self._use_startup_task,
+                                 enabled=lambda item:
+                                 autostart.mechanism() != autostart.TASK),
                 pystray.Menu.SEPARATOR,
                 pystray.MenuItem("Exit", self._exit)))
 
-    @staticmethod
-    def _toggle_autostart(*_) -> None:
-        autostart.toggle()
+    def _toggle_autostart(self, *_):
+        """Flip start-at-logon: the scheduled task is preferred, the HKCU Run
+        key is the automatic fallback."""
+        try:
+            enabled = autostart.toggle()
+        except autostart.AutostartError as exc:
+            log.warning("autostart toggle failed: %s", exc)
+            self._notify(str(exc), "Start with Windows")
+            return
+        if enabled:
+            self._notify(f"Digital Wellbeing now starts "
+                         f"{autostart.describe()}.", "Start with Windows")
+        else:
+            self._notify("Digital Wellbeing no longer starts at logon.",
+                         "Start with Windows")
+
+    def _use_startup_task(self, *_):
+        """Register the recommended on-logon task (one UAC prompt)."""
+        if autostart.mechanism() == autostart.TASK:
+            return
+        if not autostart.self_elevate(
+                ["--enable-autostart", "--autostart-mode", "task"]):
+            self._notify("Administrator rights are needed to register the "
+                         "Windows startup task.", "Start with Windows")
+
+    def _notify(self, message: str, title: str) -> None:
+        """Tray balloon - a failure here must never break the menu."""
+        try:
+            self.icon.notify(message, title)
+        except Exception:
+            log.exception("tray notification failed")
 
     def _exit(self, *_):
         self._stopped.set()
