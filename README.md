@@ -1,18 +1,43 @@
-# Digital Wellbeing for Windows (v1.3)
+# Digital Wellbeing (Windows & Linux)
 
-A Digital-Wellbeing-style **single Windows app**:
+A Digital-Wellbeing-style desktop application:
 today's **Active screen time**, **Laptop open time**, **Idle time**, **Unlocks**,
 hourly activity chart, top apps/websites, laptop sessions timeline —
 tracked by a background engine that lives in the **system tray**, viewed in a
 polished dashboard with **animated ring, hover tooltips, click-to-jump week
 chart and pull-to-refresh**. Restart-proof by design.
 
-**v1 scope:** tracking + storage + dashboard UI. NO blocking / task-kill.
+**Platforms Supported:** Windows 10/11 & Linux (Fedora, Ubuntu, Debian, Arch, GNOME, KDE, X11, Wayland).
 
 ## Stack
-Python 3.11+ · CustomTkinter · SQLite · Win32 API via ctypes · PyInstaller
+Python 3.11+ · CustomTkinter · SQLite · OS APIs (ctypes / Win32 on Windows; X11 / Wayland / D-Bus on Linux) · PyInstaller
 
 ## Run from source (dev)
+
+### Linux (Fedora / Ubuntu / Debian)
+
+1. **Install system dependencies**:
+   ```bash
+   # Fedora
+   sudo dnf install python3-tkinter libayatana-appindicator-gtk3
+
+   # Ubuntu / Debian
+   sudo apt install python3-tk gir1.2-ayatanaappindicator3-0.1
+   ```
+
+2. **Install Python packages**:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+3. **Run**:
+   ```bash
+   python3 run_app.py                 # tracker + system tray (normal use)
+   python3 run_app.py --dashboard     # open the dashboard window
+   python3 run_app.py --no-tray       # headless tracker (testing / CLI)
+   ```
+
+### Windows
 
 ```powershell
 # 1. Install Python 3.11+ (winget install Python.Python.3.12) if needed
@@ -23,24 +48,22 @@ python run_app.py --dashboard     # dashboard window
 python smoke_test.py              # opens the UI, auto-closes
 ```
 
-## The ONE executable
-
-The whole product ships as a single exe:
+## Commands & Switches
 
 | Command | What it does |
 |---|---|
-| `DigitalWellbeing.exe` | tracker + system tray (normal use / autostart) |
-| `DigitalWellbeing.exe --dashboard` | open the dashboard window |
-| `DigitalWellbeing.exe --no-tray` | headless tracker (testing) |
-| `DigitalWellbeing.exe --autostart-status` | show the start-at-logon setting |
-| `DigitalWellbeing.exe --enable-autostart` | start at logon (auto mechanism) |
-| `DigitalWellbeing.exe --disable-autostart` | stop starting at logon |
+| `python3 run_app.py` / `DigitalWellbeing.exe` | tracker + system tray (normal use / autostart) |
+| `python3 run_app.py --dashboard` / `DigitalWellbeing.exe --dashboard` | open the dashboard window |
+| `python3 run_app.py --no-tray` / `DigitalWellbeing.exe --no-tray` | headless tracker (testing) |
+| `python3 run_app.py --autostart-status` | show the start-at-logon setting |
+| `python3 run_app.py --enable-autostart` | enable start at login |
+| `python3 run_app.py --disable-autostart` | disable start at login |
 
-Tray menu: Open Dashboard · Today's active time · Start with Windows ·
-Startup method · Use startup task (admin) · Exit.
+Tray menu: Open Dashboard · Today's active time · Start at Login · Exit.
 
-Data lives in `%APPDATA%\DigitalWellbeing\wellbeing.db` (SQLite, WAL),
-logs in `%APPDATA%\DigitalWellbeing\logs\wellbeing.log`.
+### Data Storage & Logs
+* **Linux**: Data lives in `~/.local/share/digital-wellbeing/wellbeing.db`, logs in `~/.local/share/digital-wellbeing/logs/wellbeing.log`.
+* **Windows**: Data lives in `%APPDATA%\DigitalWellbeing\wellbeing.db`, logs in `%APPDATA%\DigitalWellbeing\logs\wellbeing.log`.
 
 ## Start at Windows logon
 

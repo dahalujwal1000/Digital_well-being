@@ -9,7 +9,7 @@ import pystray
 from PIL import Image, ImageDraw
 
 from src.core.tracker import Tracker
-from src.utils import autostart
+from src.platform import get_autostart
 from src.utils.log import get_logger
 from src.utils.time_format import fmt_hm
 
@@ -45,54 +45,69 @@ class TrayApp:
     def __init__(self, tracker: Tracker):
         self.tracker = tracker
         self._stopped = threading.Event()
-        self.icon = pystray.Icon(
-            "DigitalWellbeing", _icon_image(), "Digital Wellbeing",
-            menu=pystray.Menu(
-                pystray.MenuItem("Open Dashboard",
-                                 lambda *_: _open_dashboard(),
-                                 default=True),
-                pystray.MenuItem(lambda item:
-                                 fmt_hm(tracker.today_totals()[0])
-                                 + " active today",
-                                 lambda *_: None, enabled=False),
-                pystray.Menu.SEPARATOR,
-                pystray.MenuItem("Start with Windows",
-                                 self._toggle_autostart,
-                                 checked=lambda item: autostart.is_enabled()),
-                pystray.MenuItem(lambda item:
-                                 f"Startup: {autostart.describe()}",
-                                 lambda *_: None, enabled=False),
+        self.auto = get_autostart()
+
+        menu_items = [
+            pystray.MenuItem("Open Dashboard",
+                             lambda *_: _open_dashboard(),
+                             default=True),
+            pystray.MenuItem(lambda item:
+                             fmt_hm(tracker.today_totals()[0])
+                             + " active today",
+                             lambda *_: None, enabled=False),
+            pystray.Menu.SEPARATOR,
+            pystray.MenuItem("Start at Login",
+                             self._toggle_autostart,
+                             checked=lambda item: self.auto.is_enabled()),
+            pystray.MenuItem(lambda item:
+                             f"Startup: {self.auto.describe()}",
+                             lambda *_: None, enabled=False),
+        ]
+
+        if sys.platform == "win32":
+            from src.utils import autostart
+            menu_items.append(
                 pystray.MenuItem("Use startup task (admin)...",
                                  self._use_startup_task,
                                  enabled=lambda item:
-                                 autostart.mechanism() != autostart.TASK),
-                pystray.Menu.SEPARATOR,
-                pystray.MenuItem("Exit", self._exit)))
+                                 autostart.mechanism() != autostart.TASK)
+            )
+
+        menu_items.extend([
+            pystray.Menu.SEPARATOR,
+            pystray.MenuItem("Exit", self._exit)
+        ])
+
+        self.icon = pystray.Icon(
+            "DigitalWellbeing", _icon_image(), "Digital Wellbeing",
+            menu=pystray.Menu(*menu_items))
 
     def _toggle_autostart(self, *_):
-        """Flip start-at-logon: the scheduled task is preferred, the HKCU Run
-        key is the automatic fallback."""
+        """Flip start-at-logon."""
         try:
-            enabled = autostart.toggle()
-        except autostart.AutostartError as exc:
+            enabled = self.auto.toggle()
+        except Exception as exc:
             log.warning("autostart toggle failed: %s", exc)
-            self._notify(str(exc), "Start with Windows")
+            self._notify(str(exc), "Start at Login")
             return
         if enabled:
             self._notify(f"Digital Wellbeing now starts "
-                         f"{autostart.describe()}.", "Start with Windows")
+                         f"{self.auto.describe()}.", "Start at Login")
         else:
             self._notify("Digital Wellbeing no longer starts at logon.",
-                         "Start with Windows")
+                         "Start at Login")
 
     def _use_startup_task(self, *_):
-        """Register the recommended on-logon task (one UAC prompt)."""
+        """Register the recommended on-logon task (one UAC prompt) on Windows."""
+        if sys.platform != "win32":
+            return
+        from src.utils import autostart
         if autostart.mechanism() == autostart.TASK:
             return
         if not autostart.self_elevate(
                 ["--enable-autostart", "--autostart-mode", "task"]):
             self._notify("Administrator rights are needed to register the "
-                         "Windows startup task.", "Start with Windows")
+                         "Windows startup task.", "Start at Login")
 
     def _notify(self, message: str, title: str) -> None:
         """Tray balloon - a failure here must never break the menu."""

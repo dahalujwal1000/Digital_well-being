@@ -76,3 +76,12 @@ class BaseAutostart(ABC):
     def describe(self) -> str:
         """Return a human-readable status of the autostart setting."""
         pass
+
+    def toggle(self) -> bool:
+        """Toggle autostart state."""
+        if self.is_enabled():
+            self.disable()
+            return False
+        else:
+            self.enable()
+            return True
