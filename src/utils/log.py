@@ -8,9 +8,9 @@ exception should log at warning level.
 import logging
 import logging.handlers
 from pathlib import Path
+from src.utils.paths import get_log_dir
 
-APP_DIR = Path.home() / "AppData" / "Roaming" / "DigitalWellbeing"
-LOG_DIR = APP_DIR / "logs"
+LOG_DIR = get_log_dir()
 LOG_FILE = LOG_DIR / "wellbeing.log"
 
 _configured = False

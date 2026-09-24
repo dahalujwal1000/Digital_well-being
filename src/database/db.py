@@ -12,8 +12,9 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from src.utils.log import get_logger
+from src.utils.paths import get_data_dir
 
-APP_DIR = Path.home() / "AppData" / "Roaming" / "DigitalWellbeing"
+APP_DIR = get_data_dir()
 DB_PATH = APP_DIR / "wellbeing.db"
 
 log = get_logger("db")

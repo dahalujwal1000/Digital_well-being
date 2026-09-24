@@ -72,7 +72,12 @@ def executable_parts() -> tuple:
     if getattr(sys, "frozen", False):
         # frozen single exe: the binary itself IS the tracker + tray
         exe = Path(sys.executable)
-        return str(exe), "", str(exe.parent)
+        if "\\" in str(exe) and "/" not in str(exe):
+            from pathlib import PureWindowsPath
+            parent = str(PureWindowsPath(exe).parent)
+        else:
+            parent = str(exe.parent)
+        return str(exe), "", parent
     # dev / not frozen: use pythonw so no console window flashes at logon
     pythonw = Path(sys.executable).with_name("pythonw.exe")
     exe = pythonw if pythonw.exists() else Path(sys.executable)
@@ -98,11 +103,13 @@ def current_user() -> str:
 def _username_from_windows() -> str:
     """Fallback when the environment has no USERNAME (tiny login sessions)."""
     try:
-        advapi32 = ctypes.windll.advapi32
-        size = ctypes.c_ulong(256)
-        buf = ctypes.create_unicode_buffer(size.value)
-        if advapi32.GetUserNameW(buf, ctypes.byref(size)):
-            return buf.value
+        advapi32 = getattr(ctypes, "windll", None)
+        if advapi32:
+            advapi32 = advapi32.advapi32
+            size = ctypes.c_ulong(256)
+            buf = ctypes.create_unicode_buffer(size.value)
+            if advapi32.GetUserNameW(buf, ctypes.byref(size)):
+                return buf.value
     except Exception:                                   # pragma: no cover
         log.exception("could not read the current user name")
     return ""
@@ -245,7 +252,10 @@ def _message(result: subprocess.CompletedProcess) -> str:
 # --------------------------------------------------------------------------
 
 def run_key_enabled() -> bool:
-    import winreg
+    try:
+        import winreg
+    except ImportError:
+        return False
 
     try:
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY) as key:
@@ -267,7 +277,10 @@ def _write_run_key() -> None:
 
 
 def _delete_run_key() -> None:
-    import winreg
+    try:
+        import winreg
+    except ImportError:
+        return
 
     try:
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY, 0,

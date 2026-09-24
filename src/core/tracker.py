@@ -12,12 +12,16 @@ import threading
 import time
 from datetime import datetime
 
-from src.core.power_events import PowerEventWatcher
-from src.core.win32_hooks import get_foreground, get_idle_seconds
+from src.platform import get_hooks, get_power_watcher
 from src.core.website_rules import is_browser, parse_site
 from src.database.db import Store
 from src.utils.app_info import friendly_name
 from src.utils.log import get_logger
+
+# Module-level shims for tests/compatibility
+_default_hooks = get_hooks()
+get_foreground = _default_hooks.get_foreground
+get_idle_seconds = _default_hooks.get_idle_seconds
 
 TICK_SEC = 5
 FLUSH_SEC = 15
@@ -58,7 +62,8 @@ class Tracker:
         self._session_open = True
         self.store.log_event("BOOT")
 
-        self._watcher = PowerEventWatcher({
+        self._hooks = get_hooks()
+        self._watcher = get_power_watcher({
             "on_lock": self._on_lock,
             "on_unlock": self._on_unlock,
             "on_suspend": self._on_suspend,

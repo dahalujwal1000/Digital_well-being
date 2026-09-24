@@ -11,8 +11,14 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from src.dashboard import data_source, mock_data  # noqa: E402
-from src.dashboard import app as dashboard_app  # noqa: E402
 from src.database import provider  # noqa: E402
+
+try:
+    from src.dashboard import app as dashboard_app  # noqa: E402
+    HAS_TKINTER = True
+except ModuleNotFoundError:
+    dashboard_app = None
+    HAS_TKINTER = False
 
 
 class DataSourceTests(unittest.TestCase):
@@ -27,6 +33,7 @@ class DataSourceTests(unittest.TestCase):
         self.assertEqual(provider._color_for("CODE.EXE", 0),
                          mock_data.APP_COLORS["Code.exe"])
 
+    @unittest.skipUnless(HAS_TKINTER, "tkinter is not installed in the environment")
     def test_overnight_dashboard_advances_today(self):
         old_day = date(2026, 9, 17)
         new_day = date(2026, 9, 18)

@@ -3,10 +3,12 @@
 import ctypes
 from ctypes import wintypes
 
-import psutil
-
-_user32 = ctypes.windll.user32
-_kernel32 = ctypes.windll.kernel32
+_user32 = getattr(ctypes, "windll", None)
+if _user32:
+    _kernel32 = _user32.kernel32
+    _user32 = _user32.user32
+else:
+    _kernel32 = None
 
 PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
 
@@ -28,20 +30,19 @@ def get_idle_seconds() -> float:
     return delta / 1000.0
 
 
-# Explicit signatures: without them ctypes defaults to 32-bit c_int, which
-# truncates/sign-extends 64-bit HWND pointers on 64-bit Windows.
-_user32.GetForegroundWindow.restype = wintypes.HWND
-_user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND,
-                                             ctypes.POINTER(wintypes.DWORD)]
-_user32.GetWindowThreadProcessId.restype = wintypes.DWORD
-_user32.GetWindowTextLengthW.argtypes = [wintypes.HWND]
-_user32.GetWindowTextLengthW.restype = ctypes.c_int
-_user32.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR,
-                                   ctypes.c_int]
-_user32.GetWindowTextW.restype = ctypes.c_int
-_user32.GetLastInputInfo.argtypes = [ctypes.POINTER(LASTINPUTINFO)]
-_user32.GetLastInputInfo.restype = wintypes.BOOL
-_kernel32.GetTickCount.restype = wintypes.DWORD
+if _user32 and _kernel32:
+    _user32.GetForegroundWindow.restype = wintypes.HWND
+    _user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND,
+                                                 ctypes.POINTER(wintypes.DWORD)]
+    _user32.GetWindowThreadProcessId.restype = wintypes.DWORD
+    _user32.GetWindowTextLengthW.argtypes = [wintypes.HWND]
+    _user32.GetWindowTextLengthW.restype = ctypes.c_int
+    _user32.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR,
+                                       ctypes.c_int]
+    _user32.GetWindowTextW.restype = ctypes.c_int
+    _user32.GetLastInputInfo.argtypes = [ctypes.POINTER(LASTINPUTINFO)]
+    _user32.GetLastInputInfo.restype = wintypes.BOOL
+    _kernel32.GetTickCount.restype = wintypes.DWORD
 
 
 def get_foreground():

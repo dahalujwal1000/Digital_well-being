@@ -7,25 +7,29 @@ WM_POWERBROADCAST (sleep/resume), WM_WTSSESSION_CHANGE (lock/unlock/logon).
 import ctypes
 from ctypes import wintypes
 
-_user32 = ctypes.windll.user32
-_kernel32 = ctypes.windll.kernel32
-_user32.DefWindowProcW.argtypes = [
-    wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
-_user32.DefWindowProcW.restype = ctypes.c_longlong
+_user32 = getattr(ctypes, "windll", None)
+if _user32:
+    _kernel32 = _user32.kernel32
+    _user32 = _user32.user32
+    _user32.DefWindowProcW.argtypes = [
+        wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
+    _user32.DefWindowProcW.restype = ctypes.c_longlong
 
-_user32.CreateWindowExW.argtypes = [
-    wintypes.DWORD, wintypes.LPCWSTR, wintypes.LPCWSTR, wintypes.DWORD,
-    ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
-    wintypes.HWND, wintypes.HMENU, wintypes.HINSTANCE, wintypes.LPVOID]
-_user32.CreateWindowExW.restype = wintypes.HWND
+    _user32.CreateWindowExW.argtypes = [
+        wintypes.DWORD, wintypes.LPCWSTR, wintypes.LPCWSTR, wintypes.DWORD,
+        ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+        wintypes.HWND, wintypes.HMENU, wintypes.HINSTANCE, wintypes.LPVOID]
+    _user32.CreateWindowExW.restype = wintypes.HWND
 
-_user32.PostMessageW.argtypes = [
-    wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
-_user32.PostMessageW.restype = wintypes.BOOL
+    _user32.PostMessageW.argtypes = [
+        wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
+    _user32.PostMessageW.restype = wintypes.BOOL
 
-_user32.GetMessageW.argtypes = [
-    ctypes.POINTER(wintypes.MSG), wintypes.HWND, wintypes.UINT, wintypes.UINT]
-_user32.GetMessageW.restype = wintypes.BOOL
+    _user32.GetMessageW.argtypes = [
+        ctypes.POINTER(wintypes.MSG), wintypes.HWND, wintypes.UINT, wintypes.UINT]
+    _user32.GetMessageW.restype = wintypes.BOOL
+else:
+    _kernel32 = None
 
 WM_QUERYENDSESSION = 0x0011
 WM_ENDSESSION = 0x0016
@@ -40,7 +44,7 @@ WTS_SESSION_LOGON = 0x5
 WTS_SESSION_LOGOFF = 0x6
 NOTIFY_FOR_THIS_SESSION = 0
 
-_WNDPROC = ctypes.WINFUNCTYPE(
+_WNDPROC = getattr(ctypes, "WINFUNCTYPE", ctypes.CFUNCTYPE)(
     ctypes.c_longlong, wintypes.HWND, wintypes.UINT,
     wintypes.WPARAM, wintypes.LPARAM)
 

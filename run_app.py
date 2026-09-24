@@ -37,27 +37,19 @@ from src.utils.log import get_logger  # noqa: E402
 log = get_logger("main")
 
 
-_MUTEX_HANDLE = None
+_PLATFORM_LOCK = None
 
 
 def _acquire_single_instance() -> None:
-    """One tracker per Windows session: a second instance would double-count
-    time and contend on the SQLite file. A named mutex makes the check
-    process-wide; 'Local\\' namespace is per-login-session (per-user data)."""
-    global _MUTEX_HANDLE
-    import ctypes
-    from ctypes import wintypes
+    """One tracker per user session: a second instance would double-count
+    time and contend on the SQLite file."""
+    global _PLATFORM_LOCK
+    from src.platform import get_lock
 
-    kernel32 = ctypes.windll.kernel32
-    kernel32.CreateMutexW.argtypes = [wintypes.LPVOID, wintypes.BOOL,
-                                      wintypes.LPCWSTR]
-    kernel32.CreateMutexW.restype = wintypes.HANDLE
-    ERROR_ALREADY_EXISTS = 183
-    _MUTEX_HANDLE = kernel32.CreateMutexW(None, False,
-                                          "Local\\DigitalWellbeing_Tracker_Mutex")
-    if kernel32.GetLastError() == ERROR_ALREADY_EXISTS:
+    _PLATFORM_LOCK = get_lock()
+    if not _PLATFORM_LOCK.acquire():
         log.info("another tracker instance is running - exiting")
-        print("Digital Wellbeing tracker is already running (tray icon).")
+        print("Digital Wellbeing tracker is already running.")
         sys.exit(0)
 
 
@@ -65,13 +57,13 @@ def _run_tracker(args: argparse.Namespace) -> None:
     """Start the background tracking engine (optionally with the tray icon)."""
     _acquire_single_instance()
     from src.core.tracker import Tracker
-    from src.tray.tray_app import TrayApp
     from src.utils import autostart
 
     # exactly one autostart entry: if a logon task was added next to an older
     # Run key value, drop the Run key (the single-instance mutex is the
     # backstop, this keeps the log clean)
-    autostart.reconcile()
+    if sys.platform == "win32":
+        autostart.reconcile()
 
     try:
         tracker = Tracker()
@@ -98,7 +90,18 @@ def _run_tracker(args: argparse.Namespace) -> None:
             tracker.stop()
             print("Tracker stopped cleanly.")
     else:
-        TrayApp(tracker).run()
+        try:
+            from src.tray.tray_app import TrayApp
+            TrayApp(tracker).run()
+        except ImportError:
+            log.warning("System tray library 'pystray' not available. Running headless.")
+            print("System tray library not installed. Running in headless mode (Ctrl+C to stop)...")
+            try:
+                while True:
+                    time.sleep(3600)
+            except KeyboardInterrupt:
+                tracker.stop()
+                print("Tracker stopped cleanly.")
 
 
 def _run_dashboard() -> None:
@@ -110,27 +113,28 @@ def _run_dashboard() -> None:
 
 
 def _run_autostart_command(args: argparse.Namespace) -> None:
-    """Handle the autostart switches and exit (also used elevated via UAC)."""
-    from src.utils import autostart
+    """Handle the autostart switches and exit."""
+    from src.platform import get_autostart
 
+    auto = get_autostart()
     if args.autostart_status:
-        print(autostart.status_line())
-        if autostart.mechanism() != autostart.TASK:
-            print("Tip: '--enable-autostart --autostart-mode task' installs "
-                  "the recommended on-logon task"
-                  + ("" if autostart.elevated()
-                     else " (use an administrator prompt if this machine "
-                          "refuses it)"))
+        print(f"Start at login: {auto.describe()}")
         return
 
     try:
         if args.enable_autostart:
-            used = autostart.enable(args.autostart_mode)
-            print(f"Autostart enabled {autostart.describe(used)}.")
+            if auto.enable():
+                print(f"Autostart enabled: {auto.describe()}.")
+            else:
+                print("Failed to enable autostart.")
+                sys.exit(1)
         else:
-            autostart.disable()
-            print("Autostart disabled.")
-    except autostart.AutostartError as exc:
+            if auto.disable():
+                print("Autostart disabled.")
+            else:
+                print("Failed to disable autostart.")
+                sys.exit(1)
+    except Exception as exc:
         log.error("autostart command failed: %s", exc)
         print(f"ERROR: {exc}")
         sys.exit(2)
